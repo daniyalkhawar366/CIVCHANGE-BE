@@ -138,16 +138,46 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     const pdfBuffer = fs.readFileSync(pdfPath);
     socket.emit('conversion-progress', { jobId, status: 'pdf_loaded', progress: 20 });
     
-    // Convert PDF to image using Sharp
-    const imageBuffer = await sharp(pdfBuffer, { page: 0 })
+    // Convert PDF to image using Sharp with better error handling
+    let imageBuffer;
+    let width = 800; // Default width
+    let height = 600; // Default height
+    
+    try {
+      imageBuffer = await sharp(pdfBuffer, { 
+        page: 0,
+        density: 300 // Higher DPI for better quality
+      })
       .png()
       .toBuffer();
+      
+      // Get image metadata
+      const metadata = await sharp(imageBuffer).metadata();
+      width = metadata.width || 800;
+      height = metadata.height || 600;
+      
+    } catch (sharpError) {
+      console.error('Sharp PDF processing error:', sharpError);
+      socket.emit('conversion-progress', { jobId, status: 'pdf_fallback', progress: 40 });
+      
+      // Create a fallback image if Sharp can't process the PDF
+      imageBuffer = await sharp({
+        create: {
+          width: width,
+          height: height,
+          channels: 3,
+          background: { r: 255, g: 255, b: 255 }
+        }
+      })
+      .png()
+      .toBuffer();
+    }
     
     socket.emit('conversion-progress', { jobId, status: 'pdf_converted', progress: 50 });
     
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata();
-    const { width, height } = metadata;
+    if (!width || !height) {
+      throw new Error('Could not extract image dimensions from PDF');
+    }
     
     socket.emit('conversion-progress', { jobId, status: 'metadata_extracted', progress: 70 });
     

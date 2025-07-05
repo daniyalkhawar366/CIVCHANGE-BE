@@ -1,13 +1,15 @@
 FROM node:18-alpine
 
-# Install Sharp dependencies
+# Install Sharp dependencies including PDF support
 RUN apk add --no-cache \
     cairo-dev \
     pango-dev \
     jpeg-dev \
     libpng-dev \
     giflib-dev \
-    librsvg-dev
+    librsvg-dev \
+    poppler-dev \
+    vips-dev
 
 # Create app directory
 WORKDIR /app
