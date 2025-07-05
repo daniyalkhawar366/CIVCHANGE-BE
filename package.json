@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "build": "echo 'No build step required for Node.js backend'",
     "server": "node server/index.js",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "postinstall": "echo 'Installation completed successfully'"
   },
   "dependencies": {
     "axios": "^1.6.0",

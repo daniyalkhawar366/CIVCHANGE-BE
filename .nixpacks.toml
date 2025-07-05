@@ -2,10 +2,13 @@
 nixPkgs = ['chromium']
 
 [phases.install]
-cmds = ['rm -f package-lock.json && npm install --omit=dev']
+cmds = ['bash install.sh']
 
 [phases.build]
-cmds = ['echo "No build step required"']
+cmds = ['echo "Build completed"']
 
 [start]
-cmd = 'npm start' 
+cmd = 'npm start'
+
+[variables]
+NODE_ENV = 'production' 
