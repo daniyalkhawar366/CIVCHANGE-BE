@@ -13,17 +13,17 @@ Make sure to set these environment variables in your Railway project:
 1. Connect your GitHub repository to Railway
 2. Set the environment variables above
 3. Deploy - Railway will automatically:
-   - Use the Dockerfile for optimized build
+   - Use Nixpacks for optimized build
    - Install Chromium for Puppeteer
+   - Handle package-lock.json sync issues
    - Start the server with `npm start`
 
 ## Build Optimizations
 
-- ✅ Updated to Puppeteer 22.8.2 (latest stable)
-- ✅ Updated to Multer 2.0.0-rc.3 (fixes vulnerabilities)
-- ✅ Using Dockerfile for faster, more reliable builds
+- ✅ Using compatible dependency versions
+- ✅ Automatic lock file regeneration
 - ✅ Pre-installed Chromium to avoid download timeouts
-- ✅ Optimized dependency installation
+- ✅ Optimized dependency installation with `--omit=dev`
 
 ## Health Check
 
@@ -42,6 +42,13 @@ If deployment fails:
 2. Ensure all environment variables are set
 3. Verify the repository structure matches the expected layout
 4. Check that the `start` script in package.json is correct
+
+## Lock File Handling
+
+The build automatically handles package-lock.json sync issues by:
+- Removing the old lock file
+- Running `npm install` to generate a fresh one
+- Using `--omit=dev` for production-only dependencies
 
 ## Build Time Optimization
 

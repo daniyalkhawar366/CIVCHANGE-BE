@@ -2,7 +2,7 @@
 nixPkgs = ['chromium']
 
 [phases.install]
-cmds = ['npm ci --omit=dev']
+cmds = ['rm -f package-lock.json && npm install --omit=dev']
 
 [phases.build]
 cmds = ['echo "No build step required"']

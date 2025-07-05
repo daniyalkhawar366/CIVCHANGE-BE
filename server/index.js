@@ -75,7 +75,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     socket.emit('conversion-progress', { jobId, status: 'starting', progress: 0 });
     
     const browser = await puppeteer.launch({
-      headless: "new",
+      headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
       args: [
         '--no-sandbox', 
