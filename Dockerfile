@@ -5,7 +5,7 @@ RUN apk add --no-cache \
     cairo-dev \
     pango-dev \
     jpeg-dev \
-    png-dev \
+    libpng-dev \
     giflib-dev \
     librsvg-dev
 
