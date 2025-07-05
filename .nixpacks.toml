@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ['chromium']
+nixPkgs = []
 
 [phases.install]
-cmds = ['bash install.sh']
+cmds = ['npm install --omit=dev']
 
 [phases.build]
 cmds = ['echo "Build completed"']
