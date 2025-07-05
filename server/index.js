@@ -234,7 +234,7 @@ async function createPSDFromImage(imageBuffer, width, height) {
   
   const { width: imgWidth, height: imgHeight, channels } = info;
   
-  // PSD file header
+  // PSD file header (Photoshop format)
   const psdHeader = Buffer.alloc(26);
   psdHeader.write('8BPS', 0); // Signature
   psdHeader.writeUInt16BE(1, 4); // Version
@@ -249,29 +249,142 @@ async function createPSDFromImage(imageBuffer, width, height) {
   const colorModeData = Buffer.alloc(4);
   colorModeData.writeUInt32BE(0, 0);
   
-  // Image resources section (empty)
-  const imageResources = Buffer.alloc(4);
-  imageResources.writeUInt32BE(0, 0);
+  // Image resources section with basic metadata
+  const imageResources = createImageResources(imgWidth, imgHeight);
   
   // Layer and mask information section
-  const layerInfo = Buffer.alloc(4);
-  layerInfo.writeUInt32BE(0, 0); // No layers for now
+  const layerInfo = createLayerInfo(imgWidth, imgHeight, channels);
   
   // Image data section
-  const compression = Buffer.alloc(2);
-  compression.writeUInt16BE(0, 0); // Raw data
-  
-  // Convert image data to PSD format (interleaved RGB)
-  const imageData = Buffer.alloc(data.length);
-  for (let i = 0; i < data.length; i += channels) {
-    // PSD stores channels separately, but we'll store as RGB
-    imageData[i] = data[i]; // R
-    imageData[i + 1] = data[i + 1]; // G
-    imageData[i + 2] = data[i + 2]; // B
-  }
+  const imageData = createImageData(data, imgWidth, imgHeight, channels);
   
   // Combine all sections
-  return Buffer.concat([psdHeader, colorModeData, imageResources, layerInfo, compression, imageData]);
+  return Buffer.concat([psdHeader, colorModeData, imageResources, layerInfo, imageData]);
+}
+
+// Create proper image resources section
+function createImageResources(width, height) {
+  const resources = [];
+  
+  // Resolution info resource
+  const resInfo = Buffer.alloc(16);
+  resInfo.writeUInt32BE(16, 0); // Length
+  resInfo.writeUInt16BE(0x03ED, 4); // Resolution info signature
+  resInfo.writeUInt16BE(0, 6); // Reserved
+  resInfo.writeUInt32BE(72, 8); // HRes (72 DPI)
+  resInfo.writeUInt16BE(1, 12); // HResUnit (pixels per inch)
+  resInfo.writeUInt16BE(1, 14); // WidthUnit
+  resInfo.writeUInt32BE(72, 16); // VRes (72 DPI)
+  resInfo.writeUInt16BE(1, 20); // VResUnit
+  resInfo.writeUInt16BE(1, 22); // HeightUnit
+  resources.push(resInfo);
+  
+  // Calculate total length
+  const totalLength = resources.reduce((sum, res) => sum + res.length, 0);
+  
+  const header = Buffer.alloc(4);
+  header.writeUInt32BE(totalLength, 0);
+  
+  return Buffer.concat([header, ...resources]);
+}
+
+// Create proper layer info section
+function createLayerInfo(width, height, channels) {
+  // Layer info length (4 bytes)
+  const layerInfoLength = Buffer.alloc(4);
+  
+  // Layer count (2 bytes)
+  const layerCount = Buffer.alloc(2);
+  layerCount.writeUInt16BE(1, 0); // One layer
+  
+  // Layer record (20 bytes per layer)
+  const layerRecord = Buffer.alloc(20);
+  layerRecord.writeUInt32BE(0, 0); // Top
+  layerRecord.writeUInt32BE(0, 4); // Left
+  layerRecord.writeUInt32BE(height, 8); // Bottom
+  layerRecord.writeUInt32BE(width, 12); // Right
+  layerRecord.writeUInt16BE(channels, 16); // Number of channels
+  layerRecord.writeUInt16BE(0, 18); // Reserved
+  
+  // Channel length info (2 bytes per channel)
+  const channelLengths = Buffer.alloc(channels * 2);
+  for (let i = 0; i < channels; i++) {
+    channelLengths.writeUInt16BE(2, i * 2); // 2 bytes for length
+  }
+  
+  // Blend mode signature and key
+  const blendMode = Buffer.alloc(8);
+  blendMode.write('8BIM', 0); // Blend mode signature
+  blendMode.write('norm', 4); // Normal blend mode
+  
+  // Opacity and clipping
+  const opacityClipping = Buffer.alloc(4);
+  opacityClipping.writeUInt8(255, 0); // Opacity (255 = 100%)
+  opacityClipping.writeUInt8(0, 1); // Clipping (0 = base)
+  opacityClipping.writeUInt8(0, 2); // Flags
+  opacityClipping.writeUInt8(0, 3); // Filler
+  
+  // Layer mask data (empty)
+  const layerMask = Buffer.alloc(4);
+  layerMask.writeUInt32BE(0, 0);
+  
+  // Layer blending ranges (empty)
+  const blendingRanges = Buffer.alloc(4);
+  blendingRanges.writeUInt32BE(0, 0);
+  
+  // Layer name
+  const layerName = Buffer.alloc(4);
+  layerName.writeUInt8(0, 0); // Name length (0 = no name)
+  layerName.writeUInt8(0, 1); // Padding
+  layerName.writeUInt8(0, 2); // Padding
+  layerName.writeUInt8(0, 3); // Padding
+  
+  // Additional layer info (empty)
+  const additionalInfo = Buffer.alloc(4);
+  additionalInfo.writeUInt32BE(0, 0);
+  
+  // Calculate layer info length
+  const layerInfoData = Buffer.concat([
+    layerCount,
+    layerRecord,
+    channelLengths,
+    blendMode,
+    opacityClipping,
+    layerMask,
+    blendingRanges,
+    layerName,
+    additionalInfo
+  ]);
+  
+  layerInfoLength.writeUInt32BE(layerInfoData.length, 0);
+  
+  return Buffer.concat([layerInfoLength, layerInfoData]);
+}
+
+// Create proper image data section
+function createImageData(data, width, height, channels) {
+  // Compression method (2 bytes) - Raw data
+  const compression = Buffer.alloc(2);
+  compression.writeUInt16BE(0, 0);
+  
+  // Channel data lengths (2 bytes per channel)
+  const channelLengths = Buffer.alloc(channels * 2);
+  const dataLength = width * height;
+  for (let i = 0; i < channels; i++) {
+    channelLengths.writeUInt16BE(dataLength, i * 2);
+  }
+  
+  // Convert image data to PSD format (planar RGB)
+  const imageData = Buffer.alloc(dataLength * channels);
+  
+  // PSD stores channels separately (planar format)
+  for (let c = 0; c < channels; c++) {
+    for (let i = 0; i < dataLength; i++) {
+      imageData[c * dataLength + i] = data[i * channels + c];
+    }
+  }
+  
+  return Buffer.concat([compression, channelLengths, imageData]);
 }
 
 // WebSocket connection handling
