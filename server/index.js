@@ -7,7 +7,6 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -130,7 +129,7 @@ app.get('/api/job/:jobId', (req, res) => {
   res.json(conversionJobs.get(jobId));
 });
 
-// Real PDF to PSD conversion
+// Real PDF to PSD conversion using Sharp
 async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
   try {
     socket.emit('conversion-progress', { jobId, status: 'starting', progress: 0 });
@@ -139,26 +138,18 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     const pdfBuffer = fs.readFileSync(pdfPath);
     socket.emit('conversion-progress', { jobId, status: 'pdf_loaded', progress: 20 });
     
-    // Load PDF document
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
-    const pages = pdfDoc.getPages();
-    
-    if (pages.length === 0) {
-      throw new Error('PDF has no pages');
-    }
-    
-    socket.emit('conversion-progress', { jobId, status: 'pdf_parsed', progress: 40 });
-    
-    // Get the first page (for now, we'll convert the first page)
-    const page = pages[0];
-    const { width, height } = page.getSize();
-    
-    // Convert PDF page to image using Sharp
-    const pdfImage = await sharp(pdfBuffer, { page: 0 })
+    // Convert PDF to image using Sharp
+    const imageBuffer = await sharp(pdfBuffer, { page: 0 })
       .png()
       .toBuffer();
     
-    socket.emit('conversion-progress', { jobId, status: 'page_converted', progress: 60 });
+    socket.emit('conversion-progress', { jobId, status: 'pdf_converted', progress: 50 });
+    
+    // Get image metadata
+    const metadata = await sharp(imageBuffer).metadata();
+    const { width, height } = metadata;
+    
+    socket.emit('conversion-progress', { jobId, status: 'metadata_extracted', progress: 70 });
     
     // Create PSD file with actual image data
     const baseFileName = originalFileName.replace('.pdf', '').replace('.PDF', '');
@@ -166,10 +157,10 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     const psdPath = path.join(downloadsDir, psdFileName);
     
     // Create PSD with actual image content
-    const psdData = await createPSDFromImage(pdfImage, width, height);
+    const psdData = await createPSDFromImage(imageBuffer, width, height);
     fs.writeFileSync(psdPath, psdData);
     
-    socket.emit('conversion-progress', { jobId, status: 'psd_created', progress: 80 });
+    socket.emit('conversion-progress', { jobId, status: 'psd_created', progress: 90 });
     
     // Clean up the uploaded PDF
     if (fs.existsSync(pdfPath)) {
@@ -204,18 +195,13 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
 
 // Create PSD file from image data
 async function createPSDFromImage(imageBuffer, width, height) {
-  // Convert image to RGB format
-  const rgbImage = await sharp(imageBuffer)
-    .resize(Math.round(width), Math.round(height))
+  // Convert image to RGB format and get raw data
+  const { data, info } = await sharp(imageBuffer)
+    .resize(width, height)
     .png()
-    .toBuffer();
-  
-  // Get image data
-  const image = await sharp(rgbImage)
     .raw()
     .toBuffer({ resolveWithObject: true });
   
-  const { data, info } = image;
   const { width: imgWidth, height: imgHeight, channels } = info;
   
   // PSD file header

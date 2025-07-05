@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['chromium', 'cairo', 'pango', 'libjpeg', 'libpng', 'giflib', 'librsvg']
+nixPkgs = ['cairo', 'pango', 'libjpeg', 'libpng']
 
 [phases.install]
 cmds = ['npm install --omit=dev']
