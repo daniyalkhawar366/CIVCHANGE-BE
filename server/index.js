@@ -12,7 +12,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 const app = express();
@@ -77,7 +76,18 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     
     const browser = await puppeteer.launch({
       headless: "new",
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-features=VizDisplayCompositor']
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-web-security', 
+        '--disable-features=VizDisplayCompositor',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      ]
     });
     
     const page = await browser.newPage();
@@ -254,6 +264,11 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     }
   }
 }
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'OK', message: 'Canva to PSD Converter Backend is running' });
+});
 
 // Routes
 app.post('/api/upload', upload.single('pdf'), (req, res) => {
