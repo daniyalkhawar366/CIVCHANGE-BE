@@ -197,6 +197,15 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       
       await Promise.race([conversionPromise, conversionTimeoutPromise]);
       
+      // Update job status
+      const job = conversionJobs.get(jobId);
+      if (job) {
+        job.status = 'completed_with_photopea';
+        job.progress = 100;
+        job.downloadUrl = `/downloads/${psdFileName}`;
+        job.fileName = psdFileName;
+      }
+      
       socket.emit('conversion-progress', { 
         jobId, 
         status: 'completed_with_photopea', 
@@ -204,6 +213,8 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
         downloadUrl: `/downloads/${psdFileName}`,
         fileName: psdFileName
       });
+      
+      console.log(`Conversion completed successfully for job ${jobId}`);
       
     } catch (photopeaError) {
       console.error('Photopea conversion failed, using fallback:', photopeaError);
@@ -217,6 +228,16 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       
       await fallbackService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
       
+      // Update job status
+      const job = conversionJobs.get(jobId);
+      if (job) {
+        job.status = 'completed_with_fallback';
+        job.progress = 100;
+        job.downloadUrl = `/downloads/${psdFileName}`;
+        job.fileName = psdFileName;
+        job.warning = 'Used basic conversion - layers may not be preserved';
+      }
+      
       socket.emit('conversion-progress', { 
         jobId, 
         status: 'completed_with_fallback', 
@@ -225,6 +246,8 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
         fileName: psdFileName,
         warning: 'Used basic conversion - layers may not be preserved'
       });
+      
+      console.log(`Fallback conversion completed for job ${jobId}`);
     }
     
     // Clean up the uploaded PDF

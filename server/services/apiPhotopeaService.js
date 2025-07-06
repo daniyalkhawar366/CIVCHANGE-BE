@@ -36,8 +36,15 @@ class ApiPhotopeaService {
       progressCallback(80, 'PSD generated, saving file...');
       fs.writeFileSync(outputPath, psdBuffer);
       
-      progressCallback(100, 'PSD file saved successfully');
-      return outputPath;
+      // Verify file was created
+      if (fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        console.log(`PSD file saved successfully: ${outputPath}, size: ${stats.size} bytes`);
+        progressCallback(100, 'PSD file saved successfully');
+        return outputPath;
+      } else {
+        throw new Error('PSD file was not created');
+      }
 
     } catch (error) {
       console.error('API Photopea conversion error:', error);
@@ -50,6 +57,8 @@ class ApiPhotopeaService {
       // Try to convert PDF to image first using Sharp
       const sharp = (await import('sharp')).default;
       
+      console.log('Attempting to convert PDF to image...');
+      
       const imageBuffer = await sharp(pdfBuffer, { 
         page: 0,
         density: 300
@@ -57,10 +66,14 @@ class ApiPhotopeaService {
       .png()
       .toBuffer();
       
+      console.log('PDF converted to image successfully');
+      
       // Get image metadata
       const metadata = await sharp(imageBuffer).metadata();
       const width = metadata.width || 800;
       const height = metadata.height || 600;
+      
+      console.log('Image metadata:', { width, height });
       
       // Convert image to RGB format and get raw data
       const { data, info } = await sharp(imageBuffer)
@@ -70,6 +83,8 @@ class ApiPhotopeaService {
         .toBuffer({ resolveWithObject: true });
       
       const { width: imgWidth, height: imgHeight, channels } = info;
+      
+      console.log('Image processed for PSD creation');
       
       // PSD file header (Photoshop format)
       const psdHeader = Buffer.alloc(26);
@@ -107,11 +122,14 @@ class ApiPhotopeaService {
         imageData[i + 2] = data[i + 2]; // B
       }
       
+      console.log('PSD data created successfully');
+      
       // Combine all sections
       return Buffer.concat([psdHeader, colorModeData, imageResources, layerInfo, compression, imageData]);
       
     } catch (error) {
       console.error('Failed to create PSD from PDF:', error);
+      console.log('Using fallback PSD creation...');
       
       // Fallback: create a basic PSD with white background
       const width = 800;
@@ -151,6 +169,8 @@ class ApiPhotopeaService {
         imageData[i + 1] = 255; // G
         imageData[i + 2] = 255; // B
       }
+      
+      console.log('Fallback PSD created successfully');
       
       // Combine all sections
       return Buffer.concat([header, colorModeData, imageResources, layerInfo, compression, imageData]);
