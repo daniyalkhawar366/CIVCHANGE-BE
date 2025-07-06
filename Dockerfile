@@ -1,6 +1,6 @@
 FROM node:18-alpine
 
-# Install Sharp dependencies including PDF support
+# Install Sharp dependencies including PDF support and Puppeteer dependencies
 RUN apk add --no-cache \
     cairo-dev \
     pango-dev \
@@ -9,7 +9,14 @@ RUN apk add --no-cache \
     giflib-dev \
     librsvg-dev \
     poppler-dev \
-    vips-dev
+    vips-dev \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
 # Create app directory
 WORKDIR /app
@@ -19,6 +26,10 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm install --omit=dev
+
+# Set Puppeteer to use installed Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy app source
 COPY . .
