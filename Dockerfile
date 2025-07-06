@@ -18,18 +18,18 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
+# Set Puppeteer environment variables BEFORE npm install
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 # Create app directory
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --omit=dev
-
-# Set Puppeteer to use installed Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Install dependencies with timeout and retry
+RUN npm install --omit=dev --timeout=300000 --retry=3
 
 # Copy app source
 COPY . .
