@@ -76,19 +76,43 @@ class SimplePhotopeaService {
 
       progressCallback(10, 'Loading PDF into Photopea...');
 
-      // Try to find file input
-      const inputElement = await this.page.$('input[type="file"]');
-      if (!inputElement) {
-        throw new Error('File input not found on Photopea page');
+      // Check if file exists
+      if (!fs.existsSync(pdfPath)) {
+        throw new Error(`PDF file not found at path: ${pdfPath}`);
       }
 
+      console.log('PDF file exists, size:', fs.statSync(pdfPath).size, 'bytes');
+
+      // Try to find file input with multiple selectors
+      let inputElement = await this.page.$('input[type="file"]');
+      if (!inputElement) {
+        inputElement = await this.page.$('#file-input');
+      }
+      if (!inputElement) {
+        inputElement = await this.page.$('[data-file-input]');
+      }
+      if (!inputElement) {
+        // Take a screenshot to debug
+        await this.page.screenshot({ path: '/tmp/photopea-debug.png' });
+        throw new Error('File input not found on Photopea page - screenshot saved');
+      }
+
+      console.log('File input found, uploading PDF...');
       await inputElement.uploadFile(pdfPath);
       progressCallback(20, 'PDF uploaded, processing...');
 
-      // Wait for document to load
-      await this.page.waitForFunction(() => {
-        return window.app && window.app.activeDocument;
-      }, { timeout: 30000 });
+      // Wait for document to load with better error handling
+      try {
+        await this.page.waitForFunction(() => {
+          return window.app && window.app.activeDocument;
+        }, { timeout: 30000 });
+        console.log('Document loaded successfully');
+      } catch (error) {
+        console.error('Failed to wait for document:', error);
+        // Take a screenshot to debug
+        await this.page.screenshot({ path: '/tmp/photopea-doc-error.png' });
+        throw new Error('Document failed to load in Photopea');
+      }
 
       progressCallback(40, 'PDF processed, preparing for export...');
       await this.page.waitForTimeout(2000);

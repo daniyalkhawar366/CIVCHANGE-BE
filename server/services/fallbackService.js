@@ -16,6 +16,7 @@ class FallbackService {
       let height = 600;
       
       try {
+        // Try to convert PDF to image with better error handling
         imageBuffer = await sharp(pdfBuffer, { 
           page: 0,
           density: 300 // Higher DPI for better quality
@@ -32,17 +33,35 @@ class FallbackService {
         console.error('Sharp PDF processing error:', sharpError);
         progressCallback(40, 'Creating fallback image...');
         
-        // Create a fallback image if Sharp can't process the PDF
-        imageBuffer = await sharp({
-          create: {
-            width: width,
-            height: height,
-            channels: 3,
-            background: { r: 255, g: 255, b: 255 }
-          }
-        })
-        .png()
-        .toBuffer();
+        // Try alternative PDF processing
+        try {
+          // Try with different density
+          imageBuffer = await sharp(pdfBuffer, { 
+            page: 0,
+            density: 150
+          })
+          .png()
+          .toBuffer();
+          
+          const metadata = await sharp(imageBuffer).metadata();
+          width = metadata.width || 800;
+          height = metadata.height || 600;
+          
+        } catch (secondError) {
+          console.error('Second Sharp attempt failed:', secondError);
+          
+          // Create a fallback image if Sharp can't process the PDF
+          imageBuffer = await sharp({
+            create: {
+              width: width,
+              height: height,
+              channels: 3,
+              background: { r: 255, g: 255, b: 255 }
+            }
+          })
+          .png()
+          .toBuffer();
+        }
       }
       
       progressCallback(50, 'Image created, generating PSD...');

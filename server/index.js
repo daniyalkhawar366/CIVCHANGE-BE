@@ -19,7 +19,7 @@ dotenv.config({ path: path.join(projectRoot, '.env') });
 
 import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
-import SimplePhotopeaService from './services/simplePhotopeaService.js';
+import ApiPhotopeaService from './services/apiPhotopeaService.js';
 import FallbackService from './services/fallbackService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -156,7 +156,7 @@ app.get('/api/job/:jobId', (req, res) => {
 
 // Real PDF to PSD conversion using Photopea API with fallback
 async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
-  const photopeaService = new SimplePhotopeaService();
+  const photopeaService = new ApiPhotopeaService();
   const fallbackService = new FallbackService();
   
   try {
@@ -252,8 +252,6 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     await photopeaService.close();
   }
 }
-
-
 
 // WebSocket connection handling
 io.on('connection', (socket) => {
