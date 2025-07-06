@@ -48,7 +48,8 @@ class ApiPhotopeaService {
 
     } catch (error) {
       console.error('API Photopea conversion error:', error);
-      throw error;
+      // Don't throw the error, let the fallback service handle it
+      throw new Error(`Photopea conversion failed: ${error.message}`);
     }
   }
 

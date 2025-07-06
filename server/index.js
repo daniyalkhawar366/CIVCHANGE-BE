@@ -219,35 +219,53 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     } catch (photopeaError) {
       console.error('Photopea conversion failed, using fallback:', photopeaError);
       
-      // If Photopea fails, use fallback service
-      socket.emit('conversion-progress', { 
-        jobId, 
-        status: 'photopea_failed_using_fallback', 
-        progress: 5 
-      });
-      
-      await fallbackService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
-      
-      // Update job status
-      const job = conversionJobs.get(jobId);
-      if (job) {
-        job.status = 'completed_with_fallback';
-        job.progress = 100;
-        job.downloadUrl = `/downloads/${psdFileName}`;
-        job.fileName = psdFileName;
-        job.warning = 'Used basic conversion - layers may not be preserved';
+      try {
+        // If Photopea fails, use fallback service
+        socket.emit('conversion-progress', { 
+          jobId, 
+          status: 'photopea_failed_using_fallback', 
+          progress: 5 
+        });
+        
+        await fallbackService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
+        
+        // Update job status
+        const job = conversionJobs.get(jobId);
+        if (job) {
+          job.status = 'completed_with_fallback';
+          job.progress = 100;
+          job.downloadUrl = `/downloads/${psdFileName}`;
+          job.fileName = psdFileName;
+          job.warning = 'Used basic conversion - layers may not be preserved';
+        }
+        
+        socket.emit('conversion-progress', { 
+          jobId, 
+          status: 'completed_with_fallback', 
+          progress: 100,
+          downloadUrl: `/downloads/${psdFileName}`,
+          fileName: psdFileName,
+          warning: 'Used basic conversion - layers may not be preserved'
+        });
+        
+        console.log(`Fallback conversion completed for job ${jobId}`);
+      } catch (fallbackError) {
+        console.error('Fallback conversion also failed:', fallbackError);
+        
+        // Update job status to error
+        const job = conversionJobs.get(jobId);
+        if (job) {
+          job.status = 'error';
+          job.error = fallbackError.message;
+        }
+        
+        socket.emit('conversion-progress', { 
+          jobId, 
+          status: 'error', 
+          progress: 0,
+          error: `Both Photopea and fallback conversion failed: ${fallbackError.message}`
+        });
       }
-      
-      socket.emit('conversion-progress', { 
-        jobId, 
-        status: 'completed_with_fallback', 
-        progress: 100,
-        downloadUrl: `/downloads/${psdFileName}`,
-        fileName: psdFileName,
-        warning: 'Used basic conversion - layers may not be preserved'
-      });
-      
-      console.log(`Fallback conversion completed for job ${jobId}`);
     }
     
     // Clean up the uploaded PDF
@@ -288,4 +306,15 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Don't exit the process, just log the error
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process, just log the error
 }); 
