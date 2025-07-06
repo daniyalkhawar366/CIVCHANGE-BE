@@ -19,7 +19,7 @@ dotenv.config({ path: path.join(projectRoot, '.env') });
 
 import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
-import PhotopeaService from './services/photopeaService.js';
+import SimplePhotopeaService from './services/simplePhotopeaService.js';
 import FallbackService from './services/fallbackService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -156,7 +156,7 @@ app.get('/api/job/:jobId', (req, res) => {
 
 // Real PDF to PSD conversion using Photopea API with fallback
 async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
-  const photopeaService = new PhotopeaService();
+  const photopeaService = new SimplePhotopeaService();
   const fallbackService = new FallbackService();
   
   try {
@@ -180,10 +180,22 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       // Try Photopea first for better layer preservation
       socket.emit('conversion-progress', { jobId, status: 'initializing_photopea', progress: 5 });
       
-      await photopeaService.initialize();
+      // Add timeout for Photopea initialization
+      const photopeaPromise = photopeaService.initialize();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Photopea initialization timeout')), 30000)
+      );
+      
+      await Promise.race([photopeaPromise, timeoutPromise]);
       socket.emit('conversion-progress', { jobId, status: 'photopea_initialized', progress: 10 });
       
-      await photopeaService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
+      // Add timeout for Photopea conversion
+      const conversionPromise = photopeaService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
+      const conversionTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Photopea conversion timeout')), 120000) // 2 minutes
+      );
+      
+      await Promise.race([conversionPromise, conversionTimeoutPromise]);
       
       socket.emit('conversion-progress', { 
         jobId, 
