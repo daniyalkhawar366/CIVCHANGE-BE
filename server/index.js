@@ -8,6 +8,13 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import dotenv from 'dotenv';
+dotenv.config();
+import DbCon from './libs/db.js';
+import AuthRoutes from './routes/Auth.routes.js';
+
+// Load environment variables
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,11 +31,20 @@ const io = new Server(server, {
   }
 });
 
+// Connect to MongoDB
+DbCon();
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: FRONTEND_URL,
+  credentials: true
+}));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
+
+// Auth Routes
+app.use('/auth', AuthRoutes);
 
 // Create directories if they don't exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');
