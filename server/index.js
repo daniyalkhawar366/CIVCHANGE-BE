@@ -1,3 +1,5 @@
+console.log('==== DEBUG: Node version', process.version);
+console.log('==== DEBUG: Platform', process.platform, process.arch);
 console.log('==== SERVER STARTING ====');
 
 process.on('uncaughtException', (err) => {
