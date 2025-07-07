@@ -1,5 +1,5 @@
 import express from 'express'
-import { Reigster, VerfiyEmail, forgotPassword, verifyResetOTP, resetPassword, login, resendVerificationEmail, getProfile, updateProfile } from '../controllers/auth.js'
+import { Reigster, VerfiyEmail, forgotPassword, verifyResetOTP, resetPassword, login, resendVerificationEmail, getProfile, updateProfile, changePassword } from '../controllers/auth.js'
 import { authenticateToken } from '../middlewares/auth.js'
 
 const AuthRoutes=express.Router()
@@ -13,4 +13,5 @@ AuthRoutes.post('/login', login)
 AuthRoutes.post('/resend-verification', resendVerificationEmail)
 AuthRoutes.get('/profile', authenticateToken, getProfile)
 AuthRoutes.put('/profile', authenticateToken, updateProfile)
+AuthRoutes.put('/change-password', authenticateToken, changePassword)
 export default AuthRoutes 

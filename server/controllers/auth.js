@@ -215,4 +215,27 @@ const updateProfile = async (req, res) => {
     }
 };
 
-export { Reigster, VerfiyEmail, forgotPassword, verifyResetOTP, resetPassword, login, resendVerificationEmail, getProfile, updateProfile } 
+const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, message: "Both current and new password are required." });
+        }
+        const user = await Usermodel.findById(req.user._id);
+        console.log('Stored password:', user.password);
+        console.log('Current password (input):', currentPassword);
+        const isMatch = await bcryptjs.compare(currentPassword, user.password);
+        console.log('Password match:', isMatch);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, message: "Current password is incorrect." });
+        }
+        user.password = await bcryptjs.hash(newPassword, 10);
+        await user.save();
+        res.json({ success: true, message: "Password updated successfully." });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ success: false, message: "Internal server error." });
+    }
+};
+
+export { Reigster, VerfiyEmail, forgotPassword, verifyResetOTP, resetPassword, login, resendVerificationEmail, getProfile, updateProfile, changePassword } 
