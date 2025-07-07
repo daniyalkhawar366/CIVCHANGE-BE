@@ -222,7 +222,10 @@ const changePassword = async (req, res) => {
             return res.status(400).json({ success: false, message: "Both current and new password are required." });
         }
         const user = await Usermodel.findById(req.user._id);
+        console.log('Stored password:', user.password);
+        console.log('Current password (input):', currentPassword);
         const isMatch = await bcryptjs.compare(currentPassword, user.password);
+        console.log('Password match:', isMatch);
         if (!isMatch) {
             return res.status(400).json({ success: false, message: "Current password is incorrect." });
         }
