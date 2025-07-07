@@ -1,5 +1,6 @@
 import { Usermodel } from '../models/User.js';
 import bcryptjs from 'bcryptjs';
+import { SettingsModel } from '../models/Settings.js';
 
 // List/search/filter users
 export const listUsers = async (req, res) => {
@@ -89,6 +90,34 @@ export const analytics = async (req, res) => {
     const users = await Usermodel.countDocuments({ role: 'user' });
     const recentUsers = await Usermodel.find().sort({ createdAt: -1 }).limit(5).select('email name createdAt');
     res.json({ success: true, totalUsers, verifiedUsers, admins, users, recentUsers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// Get system settings
+export const getSettings = async (req, res) => {
+  try {
+    let settings = await SettingsModel.findOne();
+    if (!settings) {
+      settings = await SettingsModel.create({});
+    }
+    res.json({ success: true, settings });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// Update system settings
+export const updateSettings = async (req, res) => {
+  try {
+    let settings = await SettingsModel.findOne();
+    if (!settings) {
+      settings = await SettingsModel.create({});
+    }
+    Object.assign(settings, req.body);
+    await settings.save();
+    res.json({ success: true, settings });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
