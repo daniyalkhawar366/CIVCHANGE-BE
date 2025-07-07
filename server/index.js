@@ -326,6 +326,9 @@ io.on('connection', (socket) => {
   });
 });
 
+// Ensure MongoDB is connected before starting the server
+await DbCon();
+
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`==== DEBUG: Server running on port ${PORT}`);
