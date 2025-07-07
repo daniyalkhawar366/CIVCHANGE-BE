@@ -109,9 +109,10 @@ const upload = multer({
 // Store conversion jobs
 const conversionJobs = new Map();
 
-// Health check endpoint
+// Health check endpoint (must be before server.listen)
 app.get('/', (req, res) => {
-  res.json({ status: 'OK', message: 'Canva to PSD Converter Backend is running' });
+  console.log('Health check hit');
+  res.status(200).json({ status: 'OK', message: 'Canva to PSD Converter Backend is running' });
 });
 
 // Routes
@@ -326,7 +327,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`==== DEBUG: Server running on port ${PORT}`);
 }); 
