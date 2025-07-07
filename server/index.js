@@ -21,6 +21,7 @@ import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
 import ApiPhotopeaService from './services/apiPhotopeaService.js';
 import FallbackService from './services/fallbackService.js';
+import AdminRoutes from './routes/Admin.routes.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
@@ -54,6 +55,7 @@ app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
 
 // Auth Routes
 app.use('/auth', AuthRoutes);
+app.use('/admin', AdminRoutes);
 
 // Create directories if they don't exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');
