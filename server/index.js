@@ -33,20 +33,22 @@ console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: FRONTEND_URL,
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
 
-// Connect to MongoDB
-DbCon();
+const allowedOrigins = [
+  'https://civchange-fe.vercel.app',
+  'http://localhost:5173'
+];
 
 // Middleware
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -297,6 +299,14 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
 }
 
 // WebSocket connection handling
+io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
   
