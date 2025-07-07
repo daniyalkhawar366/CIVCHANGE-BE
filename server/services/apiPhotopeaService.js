@@ -1,5 +1,7 @@
 import axios from 'axios';
 import fs from 'fs';
+import sharp from 'sharp';
+import { writePsdBuffer } from 'ag-psd';
 
 class ApiPhotopeaService {
   constructor() {
@@ -29,12 +31,10 @@ class ApiPhotopeaService {
 
       progressCallback(20, 'Converting PDF to PSD...');
 
-      // For now, we'll create a basic PSD structure that preserves the PDF content
-      // In a production environment, you'd want to use a proper PDF to PSD conversion library
-      const psdBuffer = await this.createPSDFromPDF(pdfBuffer);
+      // Use ag-psd to create a valid PSD file
+      await this.createPSDFromPDF(pdfBuffer, outputPath);
       
       progressCallback(80, 'PSD generated, saving file...');
-      fs.writeFileSync(outputPath, psdBuffer);
       
       // Verify file was created
       if (fs.existsSync(outputPath)) {
@@ -53,128 +53,40 @@ class ApiPhotopeaService {
     }
   }
 
-  async createPSDFromPDF(pdfBuffer) {
+  async createPSDFromPDF(pdfBuffer, outputPath) {
     try {
-      // Try to convert PDF to image first using Sharp
-      const sharp = (await import('sharp')).default;
-      
-      console.log('Attempting to convert PDF to image...');
-      
-      const imageBuffer = await sharp(pdfBuffer, { 
-        page: 0,
-        density: 300
-      })
-      .png()
-      .toBuffer();
-      
-      console.log('PDF converted to image successfully');
-      
-      // Get image metadata
-      const metadata = await sharp(imageBuffer).metadata();
-      const width = metadata.width || 800;
-      const height = metadata.height || 600;
-      
-      console.log('Image metadata:', { width, height });
-      
-      // Convert image to RGB format and get raw data
-      const { data, info } = await sharp(imageBuffer)
-        .resize(width, height)
+      // Convert PDF to PNG buffer
+      const imageBuffer = await sharp(pdfBuffer, { density: 300 })
         .png()
+        .toBuffer();
+      const { width, height } = await sharp(imageBuffer).metadata();
+
+      // Get raw RGBA data
+      const { data } = await sharp(imageBuffer)
+        .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
-      
-      const { width: imgWidth, height: imgHeight, channels } = info;
-      
-      console.log('Image processed for PSD creation');
-      
-      // PSD file header (Photoshop format)
-      const psdHeader = Buffer.alloc(26);
-      psdHeader.write('8BPS', 0); // Signature
-      psdHeader.writeUInt16BE(1, 4); // Version
-      psdHeader.writeUInt32BE(0, 6); // Reserved
-      psdHeader.writeUInt16BE(channels, 10); // Number of channels
-      psdHeader.writeUInt32BE(imgHeight, 12); // Height
-      psdHeader.writeUInt32BE(imgWidth, 16); // Width
-      psdHeader.writeUInt16BE(8, 20); // Depth (8-bit)
-      psdHeader.writeUInt16BE(3, 22); // Color mode (RGB)
-      
-      // Color mode data section (empty)
-      const colorModeData = Buffer.alloc(4);
-      colorModeData.writeUInt32BE(0, 0);
-      
-      // Image resources section (empty)
-      const imageResources = Buffer.alloc(4);
-      imageResources.writeUInt32BE(0, 0);
-      
-      // Layer and mask information section (empty)
-      const layerInfo = Buffer.alloc(4);
-      layerInfo.writeUInt32BE(0, 0);
-      
-      // Image data section
-      const compression = Buffer.alloc(2);
-      compression.writeUInt16BE(0, 0); // Raw data
-      
-      // Convert image data to PSD format (interleaved RGB)
-      const imageData = Buffer.alloc(data.length);
-      for (let i = 0; i < data.length; i += channels) {
-        // PSD stores channels separately, but we'll store as RGB
-        imageData[i] = data[i]; // R
-        imageData[i + 1] = data[i + 1]; // G
-        imageData[i + 2] = data[i + 2]; // B
-      }
-      
-      console.log('PSD data created successfully');
-      
-      // Combine all sections
-      return Buffer.concat([psdHeader, colorModeData, imageResources, layerInfo, compression, imageData]);
-      
+
+      // Create a single-layer PSD
+      const psd = {
+        width,
+        height,
+        children: [
+          {
+            name: 'Background',
+            canvas: { width, height, data },
+            opacity: 255,
+            visible: true,
+          },
+        ],
+      };
+
+      const psdBuffer = writePsdBuffer(psd);
+      fs.writeFileSync(outputPath, psdBuffer);
+      console.log('ag-psd: PSD file created and written to disk.');
     } catch (error) {
-      console.error('Failed to create PSD from PDF:', error);
-      console.log('Using fallback PSD creation...');
-      
-      // Fallback: create a basic PSD with white background
-      const width = 800;
-      const height = 600;
-      
-      // PSD file header
-      const header = Buffer.alloc(26);
-      header.write('8BPS', 0); // Signature
-      header.writeUInt16BE(1, 4); // Version
-      header.writeUInt32BE(0, 6); // Reserved
-      header.writeUInt16BE(3, 10); // Number of channels (RGB)
-      header.writeUInt32BE(height, 12); // Height
-      header.writeUInt32BE(width, 16); // Width
-      header.writeUInt16BE(8, 20); // Depth (8-bit)
-      header.writeUInt16BE(3, 22); // Color mode (RGB)
-      
-      // Color mode data section (empty)
-      const colorModeData = Buffer.alloc(4);
-      colorModeData.writeUInt32BE(0, 0);
-      
-      // Image resources section (empty)
-      const imageResources = Buffer.alloc(4);
-      imageResources.writeUInt32BE(0, 0);
-      
-      // Layer and mask information section (empty)
-      const layerInfo = Buffer.alloc(4);
-      layerInfo.writeUInt32BE(0, 0);
-      
-      // Image data section
-      const compression = Buffer.alloc(2);
-      compression.writeUInt16BE(0, 0); // Raw data
-      
-      // Create a simple RGB image (white background)
-      const imageData = Buffer.alloc(width * height * 3);
-      for (let i = 0; i < imageData.length; i += 3) {
-        imageData[i] = 255;     // R
-        imageData[i + 1] = 255; // G
-        imageData[i + 2] = 255; // B
-      }
-      
-      console.log('Fallback PSD created successfully');
-      
-      // Combine all sections
-      return Buffer.concat([header, colorModeData, imageResources, layerInfo, compression, imageData]);
+      console.error('Failed to create PSD from PDF using ag-psd:', error);
+      throw error;
     }
   }
 
