@@ -60,7 +60,9 @@ app.use(cors({
       return callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
@@ -320,10 +322,9 @@ const io = new Server(server, {
 });
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  
+  console.log('WebSocket client connected:', socket.id);
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    console.log('WebSocket client disconnected:', socket.id);
   });
 });
 
