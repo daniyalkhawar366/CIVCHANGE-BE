@@ -9,6 +9,7 @@ RUN apk add --no-cache \
     giflib-dev \
     librsvg-dev \
     poppler-dev \
+    poppler-utils \
     vips-dev \
     chromium \
     nss \
