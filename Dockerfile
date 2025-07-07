@@ -1,44 +1,31 @@
-FROM node:18-alpine
+FROM node:18-slim
 
-# Install Sharp dependencies including PDF support and Puppeteer dependencies
-RUN apk add --no-cache \
-    cairo-dev \
-    pango-dev \
-    jpeg-dev \
+# Install dependencies for pdf-poppler, sharp, puppeteer
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    libcairo2-dev \
+    libjpeg-dev \
     libpng-dev \
-    giflib-dev \
-    librsvg-dev \
-    poppler-dev \
-    vips-dev \
+    libgif-dev \
+    librsvg2-dev \
+    libvips-dev \
     chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
+    fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set Puppeteer environment variables BEFORE npm install
+# Puppeteer env
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Create app directory
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies with timeout and retry
 RUN npm install --omit=dev --timeout=300000 --retry=3
 
-# Copy app source
 COPY . .
 
-# Create directories for uploads and downloads
 RUN mkdir -p uploads downloads
 
-# Expose port
 EXPOSE 3001
 
-# Start the app
 CMD ["npm", "start"] 
