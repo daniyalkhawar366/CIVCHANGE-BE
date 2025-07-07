@@ -2,6 +2,9 @@ import axios from 'axios';
 import fs from 'fs';
 import sharp from 'sharp';
 import { writePsdBuffer } from 'ag-psd';
+import { convert } from 'pdf-poppler';
+import path from 'path';
+import os from 'os';
 
 class ApiPhotopeaService {
   constructor() {
@@ -29,39 +32,31 @@ class ApiPhotopeaService {
       const pdfBuffer = fs.readFileSync(pdfPath);
       console.log('PDF file read, size:', pdfBuffer.length, 'bytes');
 
-      progressCallback(20, 'Converting PDF to PSD...');
+      progressCallback(20, 'Converting PDF to PNG...');
 
-      // Use ag-psd to create a valid PSD file
-      await this.createPSDFromPDF(pdfBuffer, outputPath);
-      
-      progressCallback(80, 'PSD generated, saving file...');
-      
-      // Verify file was created
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        console.log(`PSD file saved successfully: ${outputPath}, size: ${stats.size} bytes`);
-        progressCallback(100, 'PSD file saved successfully');
-        return outputPath;
-      } else {
-        throw new Error('PSD file was not created');
+      // Use pdf-poppler to convert PDF to PNG (first page)
+      const tempDir = os.tmpdir();
+      const tempPdfPath = path.join(tempDir, `input-${Date.now()}.pdf`);
+      fs.writeFileSync(tempPdfPath, pdfBuffer);
+      const outputDir = tempDir;
+      const outPrefix = `page-${Date.now()}`;
+      const opts = {
+        format: 'png',
+        out_dir: outputDir,
+        out_prefix: outPrefix,
+        page: 1
+      };
+      await convert(tempPdfPath, opts);
+      const pngPath = path.join(outputDir, `${outPrefix}-1.png`);
+      if (!fs.existsSync(pngPath)) {
+        throw new Error('Failed to convert PDF to PNG');
       }
 
-    } catch (error) {
-      console.error('API Photopea conversion error:', error);
-      // Don't throw the error, let the fallback service handle it
-      throw new Error(`Photopea conversion failed: ${error.message}`);
-    }
-  }
+      progressCallback(40, 'PNG created, generating PSD...');
 
-  async createPSDFromPDF(pdfBuffer, outputPath) {
-    try {
-      // Convert PDF to PNG buffer
-      const imageBuffer = await sharp(pdfBuffer, { density: 300 })
-        .png()
-        .toBuffer();
+      // Use sharp to get image data
+      const imageBuffer = fs.readFileSync(pngPath);
       const { width, height } = await sharp(imageBuffer).metadata();
-
-      // Get raw RGBA data
       const { data } = await sharp(imageBuffer)
         .ensureAlpha()
         .raw()
@@ -84,9 +79,16 @@ class ApiPhotopeaService {
       const psdBuffer = writePsdBuffer(psd);
       fs.writeFileSync(outputPath, psdBuffer);
       console.log('ag-psd: PSD file created and written to disk.');
+
+      // Clean up temp files
+      fs.unlinkSync(tempPdfPath);
+      fs.unlinkSync(pngPath);
+
+      progressCallback(100, 'PSD file saved successfully');
+      return outputPath;
     } catch (error) {
-      console.error('Failed to create PSD from PDF using ag-psd:', error);
-      throw error;
+      console.error('API Photopea conversion error:', error);
+      throw new Error(`Photopea conversion failed: ${error.message}`);
     }
   }
 
