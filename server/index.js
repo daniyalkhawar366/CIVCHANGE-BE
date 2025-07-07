@@ -45,25 +45,23 @@ console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 const app = express();
 const server = createServer(app);
 
-const allowedOrigins = [
-  'https://civchange-fe.vercel.app',
-  'http://localhost:5173'
-];
+// Log the request Origin for every request
+app.use((req, res, next) => {
+  console.log('Request Origin:', req.headers.origin);
+  next();
+});
 
-// Middleware
+// Allow all origins for CORS (debugging only)
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Global OPTIONS handler for preflight
+app.options('*', cors());
+
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
@@ -315,7 +313,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
 // WebSocket connection handling
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: '*',
     methods: ["GET", "POST"],
     credentials: true
   }
