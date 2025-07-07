@@ -5,6 +5,18 @@ const settingsSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  starterPrice: {
+    type: Number,
+    default: 0
+  },
+  proPrice: {
+    type: Number,
+    default: 0
+  },
+  businessPrice: {
+    type: Number,
+    default: 0
+  },
   conversionLimit: {
     type: Number,
     default: 10

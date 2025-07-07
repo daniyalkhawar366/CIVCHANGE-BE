@@ -115,6 +115,14 @@ export const updateSettings = async (req, res) => {
     if (!settings) {
       settings = await SettingsModel.create({});
     }
+    // Validate and sanitize input for settings fields
+    const fields = ['starterPrice', 'proPrice', 'businessPrice', 'conversionLimit'];
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        const num = Number(req.body[field]);
+        req.body[field] = isNaN(num) ? settings[field] ?? 0 : num;
+      }
+    }
     Object.assign(settings, req.body);
     await settings.save();
     res.json({ success: true, settings });
