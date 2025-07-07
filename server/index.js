@@ -310,7 +310,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
 }
 
 // WebSocket connection handling
-io = new Server(server, {
+const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
