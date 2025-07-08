@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import fs from 'fs';
+import { fromPath } from 'pdf2pic';
 
 class FallbackService {
   async convertPDFToPSD(pdfPath, outputPath, progressCallback) {
@@ -10,71 +11,51 @@ class FallbackService {
       const pdfBuffer = fs.readFileSync(pdfPath);
       progressCallback(20, 'PDF loaded, converting to image...');
       
-      // Convert PDF to image using Sharp
-      let imageBuffer;
-      let width = 800;
-      let height = 600;
+      // Convert PDF to image using pdf2pic
+      const options = {
+        density: 300, // High DPI for better quality
+        saveFilename: "page",
+        savePath: "./temp/",
+        format: "png",
+        width: 2048, // Max width
+        height: 2048  // Max height
+      };
+
+      const convert = fromPath(pdfPath, options);
       
-      try {
-        // Try to convert PDF to image with better error handling
-        imageBuffer = await sharp(pdfBuffer, { 
-          page: 0,
-          density: 300 // Higher DPI for better quality
-        })
-        .png()
-        .toBuffer();
-        
-        // Get image metadata
-        const metadata = await sharp(imageBuffer).metadata();
-        width = metadata.width || 800;
-        height = metadata.height || 600;
-        
-      } catch (sharpError) {
-        console.error('Sharp PDF processing error:', sharpError);
-        progressCallback(40, 'Creating fallback image...');
-        
-        // Try alternative PDF processing
-        try {
-          // Try with different density
-          imageBuffer = await sharp(pdfBuffer, { 
-            page: 0,
-            density: 150
-          })
-          .png()
-          .toBuffer();
-          
-          const metadata = await sharp(imageBuffer).metadata();
-          width = metadata.width || 800;
-          height = metadata.height || 600;
-          
-        } catch (secondError) {
-          console.error('Second Sharp attempt failed:', secondError);
-          
-          // Create a fallback image if Sharp can't process the PDF
-          imageBuffer = await sharp({
-            create: {
-              width: width,
-              height: height,
-              channels: 3,
-              background: { r: 255, g: 255, b: 255 }
-            }
-          })
-          .png()
-          .toBuffer();
-        }
+      // Convert first page only
+      const pageData = await convert(1);
+      
+      if (!pageData || !pageData.path) {
+        throw new Error('Failed to convert PDF to image');
       }
+
+      progressCallback(40, 'Creating fallback image...');
+
+      // Read the converted image
+      const imageBuffer = fs.readFileSync(pageData.path);
       
-      progressCallback(50, 'Image created, generating PSD...');
+      // Get image metadata
+      const metadata = await sharp(imageBuffer).metadata();
+      const width = metadata.width || 800;
+      const height = metadata.height || 600;
       
       if (!width || !height) {
         throw new Error('Could not extract image dimensions from PDF');
       }
+      
+      progressCallback(50, 'Image created, generating PSD...');
       
       progressCallback(70, 'Creating PSD file...');
       
       // Create basic PSD file
       const psdData = await this.createBasicPSD(imageBuffer, width, height);
       fs.writeFileSync(outputPath, psdData);
+      
+      // Clean up temporary image file
+      if (fs.existsSync(pageData.path)) {
+        fs.unlinkSync(pageData.path);
+      }
       
       progressCallback(100, 'PSD file created (basic conversion)');
       return outputPath;
