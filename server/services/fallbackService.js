@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import fs from 'fs';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas } from 'canvas';
 
 class FallbackService {
