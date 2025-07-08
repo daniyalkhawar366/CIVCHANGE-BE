@@ -2,7 +2,8 @@ import axios from 'axios';
 import fs from 'fs';
 import sharp from 'sharp';
 import { writePsdBuffer } from 'ag-psd';
-import { fromPath } from 'pdf2pic';
+import * as pdfjsLib from 'pdfjs-dist';
+import { createCanvas } from 'canvas';
 // import { convert } from 'pdf-poppler';
 // import path from 'path';
 // import os from 'os';
@@ -10,6 +11,8 @@ import { fromPath } from 'pdf2pic';
 class ApiPhotopeaService {
   constructor() {
     this.baseUrl = 'https://www.photopea.com';
+    // Set up PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = false;
   }
 
   async initialize() {
@@ -33,42 +36,47 @@ class ApiPhotopeaService {
       const pdfBuffer = fs.readFileSync(pdfPath);
       console.log('PDF file read, size:', pdfBuffer.length, 'bytes');
 
-      progressCallback(20, 'Converting PDF to image using pdf2pic...');
+      progressCallback(20, 'Loading PDF with pdfjs-dist...');
 
-      // Convert PDF to image using pdf2pic
-      const options = {
-        density: 300, // High DPI for better quality
-        saveFilename: "page",
-        savePath: "./temp/",
-        format: "png",
-        width: 2048, // Max width
-        height: 2048  // Max height
+      // Load PDF using pdfjs-dist
+      const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+      const pdf = await loadingTask.promise;
+      
+      if (pdf.numPages === 0) {
+        throw new Error('PDF has no pages');
+      }
+
+      // Get first page
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for better quality
+      
+      const scaledWidth = Math.floor(viewport.width);
+      const scaledHeight = Math.floor(viewport.height);
+
+      progressCallback(40, 'Rendering PDF page to canvas...');
+
+      // Create canvas and render PDF page
+      const canvas = createCanvas(scaledWidth, scaledHeight);
+      const ctx = canvas.getContext('2d');
+      
+      // Set white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+      
+      // Render PDF page to canvas
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
       };
-
-      const convert = fromPath(pdfPath, options);
       
-      // Convert first page only
-      const pageData = await convert(1);
-      
-      if (!pageData || !pageData.path) {
-        throw new Error('Failed to convert PDF to image');
-      }
+      await page.render(renderContext).promise;
 
-      progressCallback(40, 'Processing converted image...');
+      progressCallback(60, 'Processing converted image...');
 
-      // Read the converted image
-      const imageBuffer = fs.readFileSync(pageData.path);
-      
-      // Get image metadata
-      const meta = await sharp(imageBuffer).metadata();
-      const width = meta.width;
-      const height = meta.height;
-      
-      if (!width || !height) {
-        throw new Error('Could not extract image dimensions');
-      }
+      // Get image data from canvas
+      const imageBuffer = canvas.toBuffer('image/png');
 
-      progressCallback(60, 'Creating PSD with layers...');
+      progressCallback(80, 'Creating PSD with layers...');
 
       // Convert to raw data for PSD
       const raw = await sharp(imageBuffer)
@@ -80,12 +88,12 @@ class ApiPhotopeaService {
 
       // Create a single-layer PSD with proper structure
       const psd = {
-        width,
-        height,
+        width: scaledWidth,
+        height: scaledHeight,
         children: [
           {
             name: 'Background',
-            canvas: { width, height, data },
+            canvas: { width: scaledWidth, height: scaledHeight, data },
             opacity: 255,
             visible: true,
             blendMode: 'normal',
@@ -95,11 +103,6 @@ class ApiPhotopeaService {
 
       const psdBuffer = writePsdBuffer(psd);
       fs.writeFileSync(outputPath, psdBuffer);
-      
-      // Clean up temporary image file
-      if (fs.existsSync(pageData.path)) {
-        fs.unlinkSync(pageData.path);
-      }
       
       console.log('ag-psd: PSD file created and written to disk.');
 

@@ -1,8 +1,14 @@
 import sharp from 'sharp';
 import fs from 'fs';
-import { fromPath } from 'pdf2pic';
+import * as pdfjsLib from 'pdfjs-dist';
+import { createCanvas } from 'canvas';
 
 class FallbackService {
+  constructor() {
+    // Set up PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = false;
+  }
+
   async convertPDFToPSD(pdfPath, outputPath, progressCallback) {
     try {
       progressCallback(10, 'Using fallback conversion method...');
@@ -11,51 +17,49 @@ class FallbackService {
       const pdfBuffer = fs.readFileSync(pdfPath);
       progressCallback(20, 'PDF loaded, converting to image...');
       
-      // Convert PDF to image using pdf2pic
-      const options = {
-        density: 300, // High DPI for better quality
-        saveFilename: "page",
-        savePath: "./temp/",
-        format: "png",
-        width: 2048, // Max width
-        height: 2048  // Max height
-      };
-
-      const convert = fromPath(pdfPath, options);
+      // Load PDF using pdfjs-dist
+      const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+      const pdf = await loadingTask.promise;
       
-      // Convert first page only
-      const pageData = await convert(1);
-      
-      if (!pageData || !pageData.path) {
-        throw new Error('Failed to convert PDF to image');
+      if (pdf.numPages === 0) {
+        throw new Error('PDF has no pages');
       }
+
+      // Get first page
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for better quality
+      
+      const scaledWidth = Math.floor(viewport.width);
+      const scaledHeight = Math.floor(viewport.height);
 
       progressCallback(40, 'Creating fallback image...');
 
-      // Read the converted image
-      const imageBuffer = fs.readFileSync(pageData.path);
+      // Create canvas and render PDF page
+      const canvas = createCanvas(scaledWidth, scaledHeight);
+      const ctx = canvas.getContext('2d');
       
-      // Get image metadata
-      const metadata = await sharp(imageBuffer).metadata();
-      const width = metadata.width || 800;
-      const height = metadata.height || 600;
+      // Set white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, scaledWidth, scaledHeight);
       
-      if (!width || !height) {
-        throw new Error('Could not extract image dimensions from PDF');
-      }
+      // Render PDF page to canvas
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+      };
+      
+      await page.render(renderContext).promise;
+
+      // Get image data from canvas
+      const imageBuffer = canvas.toBuffer('image/png');
       
       progressCallback(50, 'Image created, generating PSD...');
       
       progressCallback(70, 'Creating PSD file...');
       
       // Create basic PSD file
-      const psdData = await this.createBasicPSD(imageBuffer, width, height);
+      const psdData = await this.createBasicPSD(imageBuffer, scaledWidth, scaledHeight);
       fs.writeFileSync(outputPath, psdData);
-      
-      // Clean up temporary image file
-      if (fs.existsSync(pageData.path)) {
-        fs.unlinkSync(pageData.path);
-      }
       
       progressCallback(100, 'PSD file created (basic conversion)');
       return outputPath;
