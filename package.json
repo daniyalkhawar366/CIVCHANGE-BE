@@ -24,7 +24,8 @@
     "dotenv": "^16.3.1",
     "express-rate-limit": "^6.10.0",
     "helmet": "^7.0.0",
-    "compression": "^1.7.4"
+    "compression": "^1.7.4",
+    "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
