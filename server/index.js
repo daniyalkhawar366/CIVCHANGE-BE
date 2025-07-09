@@ -49,7 +49,7 @@ app.use(cors({
     FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://your-domain.com' // Add your production domain
+    'https://civchange-fe.vercel.app' // Add your production domain
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
