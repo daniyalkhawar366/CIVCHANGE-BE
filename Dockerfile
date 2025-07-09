@@ -6,6 +6,10 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
+    pixman-dev \
+    cairo-dev \
+    pango-dev \
+    giflib-dev \
     poppler-utils \
     chromium \
     nss \
