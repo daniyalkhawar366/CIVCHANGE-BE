@@ -13,8 +13,10 @@ export async function extractTextFromPDF(pdfPath) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
+
     for (const item of content.items) {
       const [ , , , , x, y ] = item.transform;
+
       textData.push({
         text: item.str,
         xNorm: x / viewport.width,
@@ -26,4 +28,4 @@ export async function extractTextFromPDF(pdfPath) {
   }
 
   return textData;
-} 
+}
