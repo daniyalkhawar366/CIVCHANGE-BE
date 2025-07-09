@@ -1,29 +1,26 @@
-# Use Node.js 20 Alpine as base image
-FROM node:20-alpine
+# Use Node.js 20 slim (Debian-based) as base image
+FROM node:20-slim
 
-# Install system dependencies for Poppler, Puppeteer, and build tools for canvas
-RUN apk add --no-cache \
+# Install system dependencies for Poppler, Puppeteer, and build tools for canvas/sharp
+RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    pixman-dev \
-    cairo-dev \
-    pango-dev \
-    giflib-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libgif-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libpixman-1-dev \
     poppler-utils \
     chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
+    fonts-freefont-ttf \
     ca-certificates \
-    ttf-freefont \
-    && ln -sf python3 /usr/bin/python \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Create app directory
 WORKDIR /app
