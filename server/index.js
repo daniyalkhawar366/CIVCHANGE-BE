@@ -170,7 +170,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   }
 });
 
-app.post('/api/convert', async (req, res) => {
+/*app.post('/api/convert', async (req, res) => {
   try {
     const { jobId, enhanced = false } = req.body;
     
@@ -212,7 +212,7 @@ app.post('/api/convert', async (req, res) => {
     console.error('Convert endpoint error:', error);
     res.status(500).json({ error: error.message });
   }
-});
+});*/
 
 app.get('/api/job/:jobId', (req, res) => {
   const { jobId } = req.params;
@@ -257,7 +257,7 @@ app.get('/api/jobs', (req, res) => {
 });
 
 // Enhanced PDF to PSD conversion function
-async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName, enhanced = false) {
+/*async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName, enhanced = false) {
   let job = conversionJobs.get(jobId);
   
   try {
@@ -363,7 +363,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName, enhance
     
     throw error;
   }
-}
+}*/
 
 // Enhanced WebSocket handling
 const io = new Server(server, {
