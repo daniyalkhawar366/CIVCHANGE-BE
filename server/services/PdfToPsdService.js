@@ -4,6 +4,7 @@ import path from 'path';
 import { writePsdBuffer } from 'ag-psd';
 import { fromBuffer } from 'pdf2pic';
 import { fileURLToPath } from 'url';
+import { createCanvas, ImageData } from 'canvas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,14 +70,20 @@ class PdfToPsdService {
           .raw()
           .toBuffer();
 
+        // Create a real Canvas and draw the image data
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        const imgData = new ImageData(
+          Uint8ClampedArray.from(imageData),
+          width,
+          height
+        );
+        ctx.putImageData(imgData, 0, 0);
+
         // Create layer
         const layer = {
           name: `Page ${i + 1}`,
-          canvas: {
-            width: width,
-            height: height,
-            data: imageData
-          },
+          canvas: canvas, // Pass the Canvas instance
           opacity: 255,
           visible: true,
           blendMode: 'normal'
