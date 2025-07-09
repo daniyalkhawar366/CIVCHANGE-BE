@@ -1,8 +1,11 @@
 # Use Node.js 20 Alpine as base image
 FROM node:20-alpine
 
-# Install system dependencies for Poppler and Puppeteer
+# Install system dependencies for Poppler, Puppeteer, and build tools for canvas
 RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
     poppler-utils \
     chromium \
     nss \
@@ -11,6 +14,7 @@ RUN apk add --no-cache \
     harfbuzz \
     ca-certificates \
     ttf-freefont \
+    && ln -sf python3 /usr/bin/python \
     && rm -rf /var/cache/apk/*
 
 # Set environment variables for Puppeteer
