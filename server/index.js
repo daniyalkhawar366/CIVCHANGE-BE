@@ -30,6 +30,7 @@ dotenv.config({ path: path.join(projectRoot, '.env') });
 import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
 import AdminRoutes from './routes/Admin.routes.js';
+import ConvertRoutes from './routes/convert.js';
 import PdfToPsdService from './services/PdfToPsdService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -66,6 +67,8 @@ app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
 // Routes
 app.use('/auth', AuthRoutes);
 app.use('/admin', AdminRoutes);
+app.use('/api', ConvertRoutes);
+
 
 // Create directories if they don't exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');

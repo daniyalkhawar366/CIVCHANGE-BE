@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
+import PhotopeaApiFallback from './photopeaApiFallback.js';
 
 class PhotopeaService {
   constructor() {
@@ -10,9 +11,6 @@ class PhotopeaService {
 
   async initialize() {
     try {
-      console.log('Initializing Photopea service...');
-      console.log('PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
-      
       const launchOptions = {
         headless: true,
         args: [
@@ -28,108 +26,50 @@ class PhotopeaService {
         ]
       };
 
-      // Add executable path if available
       if (process.env.PUPPETEER_EXECUTABLE_PATH) {
         launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-        console.log('Using system Chromium at:', process.env.PUPPETEER_EXECUTABLE_PATH);
-      } else {
-        console.log('Using bundled Chromium');
       }
 
       this.browser = await puppeteer.launch(launchOptions);
-      console.log('Browser launched successfully');
-      
       this.page = await this.browser.newPage();
       await this.page.setViewport({ width: 1920, height: 1080 });
-      
-      console.log('Navigating to Photopea...');
-      // Navigate to Photopea
-      await this.page.goto('https://www.photopea.com/', { 
-        waitUntil: 'networkidle2',
-        timeout: 30000 
-      });
-      
-      console.log('Waiting for Photopea to load...');
-      // Wait for Photopea to load completely
+      await this.page.goto('https://www.photopea.com/', { waitUntil: 'networkidle2', timeout: 30000 });
       await this.page.waitForSelector('#app', { timeout: 30000 });
-      console.log('Photopea loaded successfully');
-      
-      return true;
     } catch (error) {
-      console.error('Failed to initialize Photopea service:', error);
+      console.error('Puppeteer init failed, switching to fallback:', error.message);
       throw error;
     }
   }
 
-  async convertPDFToPSD(pdfPath, outputPath, progressCallback) {
+  async convertPDFToPSD(pdfPath, outputPath, progressCallback = () => {}) {
     try {
-      if (!this.page) {
-        await this.initialize();
-      }
+      if (!this.page) await this.initialize();
 
-      progressCallback(10, 'Loading PDF into Photopea...');
-
-      // Upload the PDF file to Photopea
+      progressCallback(10, 'Uploading to Photopea (Puppeteer)...');
       const inputElement = await this.page.$('input[type="file"]');
-      if (!inputElement) {
-        throw new Error('File input not found on Photopea page');
-      }
+      if (!inputElement) throw new Error('File input not found');
 
       await inputElement.uploadFile(pdfPath);
-      progressCallback(20, 'PDF uploaded, processing...');
+      progressCallback(30, 'PDF uploaded');
 
-      // Wait for the PDF to load and process
-      await this.page.waitForFunction(() => {
-        return window.app && window.app.activeDocument;
-      }, { timeout: 60000 });
+      await this.page.waitForTimeout(5000); // wait for PDF load
+      progressCallback(60, 'Exporting to PSD...');
 
-      progressCallback(40, 'PDF processed, preparing for export...');
-
-      // Wait a bit more for full processing
-      await this.page.waitForTimeout(3000);
-
-      // Execute Photopea API to export as PSD
-      progressCallback(60, 'Exporting as PSD...');
-      
-      const psdData = await this.page.evaluate(async () => {
-        return new Promise((resolve, reject) => {
-          try {
-            // Use Photopea's internal API to export as PSD
-            const doc = window.app.activeDocument;
-            if (!doc) {
-              reject(new Error('No active document found'));
-              return;
-            }
-
-            // Export as PSD using Photopea's API
-            window.app.invoke('file/export', {
-              format: 'psd',
-              document: doc
-            }).then((result) => {
-              resolve(result);
-            }).catch(reject);
-
-          } catch (error) {
-            reject(error);
-          }
-        });
+      const psdData = await this.page.evaluate(() => {
+        return app.activeDocument.saveToOE("psd");
       });
 
-      progressCallback(80, 'PSD generated, saving file...');
+      if (!psdData?.data) throw new Error('Empty PSD data');
 
-      // Convert the result to a buffer and save
-      if (psdData && psdData.data) {
-        const buffer = Buffer.from(psdData.data);
-        fs.writeFileSync(outputPath, buffer);
-        progressCallback(100, 'PSD file saved successfully');
-        return outputPath;
-      } else {
-        throw new Error('No PSD data received from Photopea');
-      }
-
+      fs.writeFileSync(outputPath, Buffer.from(psdData.data));
+      progressCallback(100, 'Saved successfully');
     } catch (error) {
-      console.error('Photopea conversion error:', error);
-      throw error;
+      console.error('[Puppeteer Error]:', error.message);
+      progressCallback(70, 'Falling back to API...');
+      const fallback = new PhotopeaApiFallback();
+      await fallback.convertWithApi(pdfPath, outputPath, progressCallback);
+    } finally {
+      await this.close();
     }
   }
 
@@ -142,4 +82,4 @@ class PhotopeaService {
   }
 }
 
-export default PhotopeaService; 
+export default PhotopeaService;
