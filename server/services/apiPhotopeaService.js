@@ -2,7 +2,7 @@ import axios from 'axios';
 import fs from 'fs';
 import sharp from 'sharp';
 import { writePsdBuffer } from 'ag-psd';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 import { createCanvas } from 'canvas';
 // import { convert } from 'pdf-poppler';
 // import path from 'path';
