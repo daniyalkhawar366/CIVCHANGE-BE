@@ -314,7 +314,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName, enhance
     
     conversionJobs.set(jobId, job);
     
-    socket.emit('conversion-complete', { 
+    socket.emit('conversion-progress', { 
       jobId, 
       status: 'completed', 
       progress: 100,
