@@ -11,15 +11,15 @@ export async function extractTextFromPDF(pdfPath) {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
     for (const item of content.items) {
-      // item.transform: [a, b, c, d, e, f] (e, f) is the position
-      // item.height is the font size
+      const [ , , , , x, y ] = item.transform;
       textData.push({
         text: item.str,
-        x: item.transform[4],
-        y: item.transform[5],
-        fontSize: item.height,
+        xNorm: x / viewport.width,
+        yNorm: y / viewport.height,
+        fontSizeNorm: item.height / viewport.height,
         page: i
       });
     }

@@ -94,22 +94,22 @@ class PdfToPsdService {
         });
 
         // Add text layers for this page
-        const pageTextData = allTextData.filter(t => t.page === i + 1 && t.text && t.text.trim() && t.fontSize > 0);
+        const pageTextData = allTextData.filter(t => t.page === i + 1 && t.text && t.text.trim() && t.fontSizeNorm > 0);
         for (const textObj of pageTextData) {
           psdLayers.push({
             name: `Text: ${textObj.text.substring(0, 20)}`,
             text: {
               text: textObj.text,
               font: {
-                name: 'Arial', // Default, as font extraction is not implemented yet
-                sizes: [textObj.fontSize],
-                colors: [[0, 0, 0]], // Black text
+                name: 'Arial',
+                sizes: [textObj.fontSizeNorm * height], // scale font size
+                colors: [[0, 0, 0]],
                 styles: [0],
-                lineHeight: textObj.fontSize * 1.2,
+                lineHeight: textObj.fontSizeNorm * height * 1.2,
                 letterSpacing: 0
               },
-              left: textObj.x,
-              top: height - textObj.y, // PDF y=bottom, PSD y=top
+              left: textObj.xNorm * width,
+              top: (1 - textObj.yNorm) * height, // Flip Y for PSD coordinate system
               transform: undefined
             },
             opacity: 255,
