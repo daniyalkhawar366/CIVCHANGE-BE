@@ -5,6 +5,7 @@ import { writePsdBuffer } from 'ag-psd';
 import { fromBuffer } from 'pdf2pic';
 import { fileURLToPath } from 'url';
 import { createCanvas, ImageData } from 'canvas';
+import { extractTextFromPDF } from '../utils/extractTextFromPDF.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,13 +56,16 @@ class PdfToPsdService {
       const metadata = await sharp(firstPageBuffer).metadata();
       const { width, height } = metadata;
 
+      // Extract text data for all pages
+      const allTextData = await extractTextFromPDF(pdfPath);
+
       // Create PSD structure
       const psdLayers = [];
       
-      // Process each page as a layer
+      // Process each page as a raster image layer
       for (let i = 0; i < pages.length; i++) {
         const pageBuffer = pages[i].buffer;
-        progressCallback(40 + (i * 30) / pages.length, `Processing page ${i + 1}/${pages.length}...`);
+        progressCallback(40 + (i * 20) / pages.length, `Processing page ${i + 1}/${pages.length}...`);
         
         // Convert to RGBA for PSD
         const imageData = await sharp(pageBuffer)
@@ -80,16 +84,39 @@ class PdfToPsdService {
         );
         ctx.putImageData(imgData, 0, 0);
 
-        // Create layer
-        const layer = {
-          name: `Page ${i + 1}`,
-          canvas: canvas, // Pass the Canvas instance
+        // Create raster image layer
+        psdLayers.push({
+          name: `Page ${i + 1} (Image)`,
+          canvas: canvas,
           opacity: 255,
           visible: true,
           blendMode: 'normal'
-        };
+        });
 
-        psdLayers.push(layer);
+        // Add text layers for this page
+        const pageTextData = allTextData.filter(t => t.page === i + 1 && t.text && t.text.trim() && t.fontSize > 0);
+        for (const textObj of pageTextData) {
+          psdLayers.push({
+            name: `Text: ${textObj.text.substring(0, 20)}`,
+            text: {
+              text: textObj.text,
+              font: {
+                name: 'Arial', // Default, as font extraction is not implemented yet
+                sizes: [textObj.fontSize],
+                colors: [[0, 0, 0]], // Black text
+                styles: [0],
+                lineHeight: textObj.fontSize * 1.2,
+                letterSpacing: 0
+              },
+              left: textObj.x,
+              top: height - textObj.y, // PDF y=bottom, PSD y=top
+              transform: undefined
+            },
+            opacity: 255,
+            visible: true,
+            blendMode: 'normal'
+          });
+        }
       }
 
       progressCallback(70, 'Creating PSD structure...');
