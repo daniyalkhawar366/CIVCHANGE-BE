@@ -1,28 +1,17 @@
-# Use Node.js 20 slim (Debian-based) as base image
-FROM node:20-slim
+# Use official Node.js 18 image
+FROM node:18-slim
 
-# Install system dependencies for Poppler, Puppeteer, and build tools for canvas/sharp
+# Install system dependencies for pdf2pic and sharp
 RUN apt-get update && apt-get install -y \
+    graphicsmagick \
+    ghostscript \
+    poppler-utils \
     python3 \
     make \
     g++ \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libgif-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libpixman-1-dev \
-    poppler-utils \
-    chromium \
-    fonts-freefont-ttf \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables for Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
-# Create app directory
+# Set working directory
 WORKDIR /app
 
 # Copy package files
@@ -37,12 +26,16 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p uploads downloads temp
 
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
 # Expose port
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "console.log('Health check passed')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/ || exit 1
 
 # Start the application
-CMD ["npm", "start"] 
+CMD ["npm", "start"]
