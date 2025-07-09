@@ -32,6 +32,7 @@ import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
 import ApiPhotopeaService from './services/apiPhotopeaService.js';
 import FallbackService from './services/fallbackService.js';
+import HybridPdfService from './services/hybridPdfService.js';
 import AdminRoutes from './routes/Admin.routes.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -170,9 +171,9 @@ app.get('/api/job/:jobId', (req, res) => {
   res.json(conversionJobs.get(jobId));
 });
 
-// Real PDF to PSD conversion using Photopea API with fallback
+// Real PDF to PSD conversion using Hybrid approach with fallback
 async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
-  const photopeaService = new ApiPhotopeaService();
+  const hybridService = new HybridPdfService();
   const fallbackService = new FallbackService();
   
   try {
@@ -193,22 +194,22 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
     };
     
     try {
-      // Try Photopea first for better layer preservation
-      socket.emit('conversion-progress', { jobId, status: 'initializing_photopea', progress: 5 });
+      // Try Hybrid service first for best quality and layer preservation
+      socket.emit('conversion-progress', { jobId, status: 'initializing_hybrid_service', progress: 5 });
       
-      // Add timeout for Photopea initialization
-      const photopeaPromise = photopeaService.initialize();
+      // Add timeout for Hybrid service initialization
+      const hybridPromise = hybridService.initialize();
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Photopea initialization timeout')), 30000)
+        setTimeout(() => reject(new Error('Hybrid service initialization timeout')), 30000)
       );
       
-      await Promise.race([photopeaPromise, timeoutPromise]);
-      socket.emit('conversion-progress', { jobId, status: 'photopea_initialized', progress: 10 });
+      await Promise.race([hybridPromise, timeoutPromise]);
+      socket.emit('conversion-progress', { jobId, status: 'hybrid_service_initialized', progress: 10 });
       
-      // Add timeout for Photopea conversion
-      const conversionPromise = photopeaService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
+      // Add timeout for Hybrid conversion
+      const conversionPromise = hybridService.convertPDFToPSD(pdfPath, psdPath, progressCallback);
       const conversionTimeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Photopea conversion timeout')), 120000) // 2 minutes
+        setTimeout(() => reject(new Error('Hybrid conversion timeout')), 180000) // 3 minutes
       );
       
       await Promise.race([conversionPromise, conversionTimeoutPromise]);
@@ -216,7 +217,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       // Update job status
       const job = conversionJobs.get(jobId);
       if (job) {
-        job.status = 'completed_with_photopea';
+        job.status = 'completed_with_hybrid';
         job.progress = 100;
         job.downloadUrl = `/downloads/${psdFileName}`;
         job.fileName = psdFileName;
@@ -224,22 +225,22 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       
       socket.emit('conversion-progress', { 
         jobId, 
-        status: 'completed_with_photopea', 
+        status: 'completed_with_hybrid', 
         progress: 100,
         downloadUrl: `/downloads/${psdFileName}`,
         fileName: psdFileName
       });
       
-      console.log(`Conversion completed successfully for job ${jobId}`);
+      console.log(`Hybrid conversion completed successfully for job ${jobId}`);
       
-    } catch (photopeaError) {
-      console.error('Photopea conversion failed, using fallback:', photopeaError);
+    } catch (hybridError) {
+      console.error('Hybrid conversion failed, using fallback:', hybridError);
       
       try {
-        // If Photopea fails, use fallback service
+        // If Hybrid fails, use fallback service
         socket.emit('conversion-progress', { 
           jobId, 
-          status: 'photopea_failed_using_fallback', 
+          status: 'hybrid_failed_using_fallback', 
           progress: 5 
         });
         
@@ -279,7 +280,7 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
           jobId, 
           status: 'error', 
           progress: 0,
-          error: `Both Photopea and fallback conversion failed: ${fallbackError.message}`
+          error: `Both Hybrid and fallback conversion failed: ${fallbackError.message}`
         });
       }
     }
@@ -305,8 +306,8 @@ async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName) {
       fs.unlinkSync(pdfPath);
     }
   } finally {
-    // Always close the Photopea service
-    await photopeaService.close();
+    // Always close the Hybrid service
+    await hybridService.close();
   }
 }
 

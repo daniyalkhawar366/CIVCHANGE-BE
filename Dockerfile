@@ -1,31 +1,43 @@
-FROM node:18-slim
+# Use Node.js 18 Alpine as base image
+FROM node:18-alpine
 
-# Install dependencies for pdf-poppler, sharp, puppeteer
-RUN apt-get update && apt-get install -y \
+# Install system dependencies for Poppler and Puppeteer
+RUN apk add --no-cache \
     poppler-utils \
-    libcairo2-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libgif-dev \
-    librsvg2-dev \
-    libvips-dev \
     chromium \
-    fonts-freefont-ttf \
-    && rm -rf /var/lib/apt/lists/*
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    && rm -rf /var/cache/apk/*
 
-# Puppeteer env
+# Set environment variables for Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
+# Create app directory
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
-RUN npm install --omit=dev --timeout=300000 --retry=3
 
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy application code
 COPY . .
 
-RUN mkdir -p uploads downloads
+# Create necessary directories
+RUN mkdir -p uploads downloads temp
 
-EXPOSE 3001
+# Expose port
+EXPOSE 8080
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "console.log('Health check passed')" || exit 1
+
+# Start the application
 CMD ["npm", "start"] 
