@@ -74,7 +74,7 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode: 'payment',
+      mode: 'subscription', // Changed from 'payment' to 'subscription'
       line_items: [
         {
           price: priceId,
