@@ -1,9 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import Stripe from 'stripe';
 import { Usermodel } from '../models/User.js';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-dotenv.config();
+
+console.log('Stripe key:', process.env.STRIPE_SECRET_KEY); // DEBUG: Print Stripe secret key
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
