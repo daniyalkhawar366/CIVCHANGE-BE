@@ -60,8 +60,6 @@ app.use(cors({
 
 // Register Stripe webhook route BEFORE body parsers
 import Stripe from 'stripe';
-import dotenv from 'dotenv';
-dotenv.config();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), PaymentRoutes.stack.find(r => r.route && r.route.path === '/webhook').route.stack[0].handle);
