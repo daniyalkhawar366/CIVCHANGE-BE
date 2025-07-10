@@ -32,6 +32,7 @@ import AuthRoutes from './routes/Auth.routes.js';
 import AdminRoutes from './routes/Admin.routes.js';
 import ConvertRoutes from './routes/convert.js';
 import PaymentRoutes from './routes/payment.js';
+import UserRoutes from './routes/user.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
@@ -69,6 +70,7 @@ app.use('/auth', AuthRoutes);
 app.use('/admin', AdminRoutes);
 app.use('/api', ConvertRoutes);
 app.use('/api/payments', PaymentRoutes);
+app.use('/api/user', UserRoutes);
 
 
 // Create directories if they don't exist

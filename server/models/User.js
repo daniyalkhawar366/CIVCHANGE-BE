@@ -41,6 +41,20 @@ const userShcema= new mongoose.Schema({
     stripeCustomerId: {
         type: String
     },
+    stripeSubscriptionId: {
+        type: String
+    },
+    subscriptionStatus: {
+        type: String,
+        enum: ['active', 'canceled', 'past_due', 'incomplete', 'incomplete_expired', 'trialing', 'unpaid', 'paused', 'free'],
+        default: 'free'
+    },
+    subscriptionEndDate: {
+        type: Date
+    },
+    pendingPlan: {
+        type: String
+    },
     resetPasswordToken:String,
     resetPasswordExpiresAt:Date,
     verficationToken:String,

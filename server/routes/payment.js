@@ -67,6 +67,10 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid plan selected' });
   }
 
+  if (user.subscriptionStatus === 'active') {
+    return res.status(403).json({ error: 'You already have an active subscription. Please use the upgrade page.' });
+  }
+
   const priceId = PRICE_IDS[plan];
   console.log('Stripe Checkout Debug:', { plan, priceId }); // Debug print
   if (!priceId) return res.status(400).json({ error: 'Plan not available' });
@@ -107,25 +111,58 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // Handle checkout.session.completed for subscriptions
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const userId = session.metadata.userId;
     const plan = session.metadata.plan;
-    const isUpgrade = session.metadata.upgrade === 'true' || session.metadata.upgrade === true;
     try {
       const user = await Usermodel.findById(userId);
       if (!user) return res.status(404).send('User not found');
       if (!['basic', 'pro', 'premium'].includes(plan)) return res.status(400).send('Invalid plan');
       user.plan = plan;
       user.conversionsLeft = PLAN_LIMITS[plan];
-      if (session.customer) user.stripeCustomerId = session.customer;
+      user.stripeCustomerId = session.customer;
+      user.stripeSubscriptionId = session.subscription;
+      user.subscriptionStatus = 'active';
+      user.pendingPlan = undefined;
       await user.save();
-      console.log(`User ${user.email} upgraded to ${plan}`);
+      console.log(`User ${user.email} subscribed to ${plan}`);
     } catch (err) {
       console.error('Failed to update user after payment:', err);
       return res.status(500).send('Failed to update user');
     }
   }
+
+  // Handle subscription updates (downgrade, cancel, etc.)
+  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object;
+    const stripeSubscriptionId = subscription.id;
+    try {
+      const user = await Usermodel.findOne({ stripeSubscriptionId });
+      if (!user) return res.status(404).send('User not found');
+      user.subscriptionStatus = subscription.status;
+      user.subscriptionEndDate = new Date(subscription.current_period_end * 1000);
+      // Handle downgrade at period end
+      if (user.pendingPlan && subscription.cancel_at_period_end) {
+        user.plan = user.pendingPlan;
+        user.conversionsLeft = user.plan === 'free' ? 1 : PLAN_LIMITS[user.plan];
+        user.pendingPlan = undefined;
+      }
+      // If canceled, set plan to free at period end
+      if (subscription.status === 'canceled') {
+        user.plan = 'free';
+        user.conversionsLeft = 1;
+        user.pendingPlan = undefined;
+      }
+      await user.save();
+      console.log(`User ${user.email} subscription updated: ${subscription.status}`);
+    } catch (err) {
+      console.error('Failed to update user after subscription event:', err);
+      return res.status(500).send('Failed to update user');
+    }
+  }
+
   res.status(200).send('Received');
 });
 
@@ -169,6 +206,38 @@ router.post('/upgrade', requireAuth, async (req, res) => {
     console.error('Stripe error:', err);
     res.status(500).json({ error: 'Failed to create upgrade session' });
   }
+});
+
+// POST /api/payments/cancel-subscription
+router.post('/cancel-subscription', requireAuth, async (req, res) => {
+  const user = req.user;
+  if (!user.stripeSubscriptionId || user.subscriptionStatus !== 'active') {
+    return res.status(400).json({ error: 'No active subscription to cancel.' });
+  }
+  try {
+    // Cancel at period end
+    const canceled = await stripe.subscriptions.update(user.stripeSubscriptionId, { cancel_at_period_end: true });
+    user.subscriptionStatus = 'canceled';
+    user.subscriptionEndDate = new Date(canceled.current_period_end * 1000);
+    user.pendingPlan = 'free';
+    await user.save();
+    res.json({ message: 'Subscription will be canceled at period end.', endDate: user.subscriptionEndDate });
+  } catch (err) {
+    console.error('Stripe cancel error:', err);
+    res.status(500).json({ error: 'Failed to cancel subscription', details: err.message });
+  }
+});
+
+// GET /api/user/account
+router.get('/user/account', requireAuth, async (req, res) => {
+  const user = req.user;
+  res.json({
+    plan: user.plan,
+    conversionsLeft: user.conversionsLeft,
+    subscriptionStatus: user.subscriptionStatus,
+    subscriptionEndDate: user.subscriptionEndDate,
+    pendingPlan: user.pendingPlan
+  });
 });
 
 export default router; 
