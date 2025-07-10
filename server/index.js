@@ -31,7 +31,6 @@ import DbCon from './libs/db.js';
 import AuthRoutes from './routes/Auth.routes.js';
 import AdminRoutes from './routes/Admin.routes.js';
 import ConvertRoutes from './routes/convert.js';
-import PdfToPsdService from './services/PdfToPsdService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
@@ -112,9 +111,6 @@ const upload = multer({
 
 // Store conversion jobs with enhanced structure
 const conversionJobs = new Map();
-
-// Initialize PDF to PSD service
-const pdfToPsdService = new PdfToPsdService();
 
 // Health check endpoint
 app.get('/', (req, res) => {
