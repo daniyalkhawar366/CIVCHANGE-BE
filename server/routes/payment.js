@@ -120,8 +120,15 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       const user = await Usermodel.findById(userId);
       if (!user) return res.status(404).send('User not found');
       if (!['basic', 'pro', 'premium'].includes(plan)) return res.status(400).send('Invalid plan');
+      const newConversions = PLAN_LIMITS[plan];
+      // If user is not active (new purchase or after cancel), add conversions
+      if (user.subscriptionStatus !== 'active') {
+        user.conversionsLeft = (user.conversionsLeft || 0) + newConversions;
+      } else if (planRank(plan) > planRank(user.plan)) {
+        // If upgrading, set conversionsLeft to new plan's limit
+        user.conversionsLeft = newConversions;
+      }
       user.plan = plan;
-      user.conversionsLeft = PLAN_LIMITS[plan];
       user.stripeCustomerId = session.customer;
       user.stripeSubscriptionId = session.subscription;
       user.subscriptionStatus = 'active';
@@ -176,7 +183,7 @@ router.post('/upgrade', requireAuth, async (req, res) => {
   }
 
   if (planRank(plan) <= planRank(user.plan)) {
-    return res.status(403).json({ error: 'You can only upgrade to a higher plan.' });
+    return res.status(403).json({ error: 'To downgrade or buy the same/lower plan, please cancel your current subscription first. Your conversions will remain and new plan conversions will be added.' });
   }
 
   const priceId = PRICE_IDS[plan];
@@ -185,7 +192,7 @@ router.post('/upgrade', requireAuth, async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode: 'payment',
+      mode: 'subscription',
       line_items: [
         {
           price: priceId,
@@ -193,8 +200,8 @@ router.post('/upgrade', requireAuth, async (req, res) => {
         }
       ],
       customer_email: user.email,
-      success_url: `${process.env.FRONTEND_URL}/account?success=1`,
-      cancel_url: `${process.env.FRONTEND_URL}/account?canceled=1`,
+      success_url: `https://civchange-fe.vercel.app/account?success=1&plan=${plan}`,
+      cancel_url: `https://civchange-fe.vercel.app/`,
       metadata: {
         userId: user._id.toString(),
         plan,
