@@ -74,7 +74,7 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode: 'subscription', // Changed from 'payment' to 'subscription'
+      mode: 'subscription',
       line_items: [
         {
           price: priceId,
@@ -82,8 +82,8 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
         }
       ],
       customer_email: user.email,
-      success_url: `${process.env.FRONTEND_URL}/account?success=1`,
-      cancel_url: `${process.env.FRONTEND_URL}/account?canceled=1`,
+      success_url: `https://civchange-fe.vercel.app/account?success=1&plan=${plan}`,
+      cancel_url: `https://civchange-fe.vercel.app/`,
       metadata: {
         userId: user._id.toString(),
         plan
