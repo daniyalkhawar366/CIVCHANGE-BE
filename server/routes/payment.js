@@ -155,19 +155,17 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       if (!user) return res.status(404).send('User not found');
       user.subscriptionStatus = subscription.status;
       user.subscriptionEndDate = new Date(subscription.current_period_end * 1000);
-      // Handle downgrade at period end
-      if (user.pendingPlan && subscription.cancel_at_period_end) {
-        user.plan = user.pendingPlan;
-        user.pendingPlan = undefined;
-        // conversionsLeft remains unchanged
-        console.log(`[WEBHOOK] User ${user.email} downgraded to ${user.plan} at period end. Conversions remain: ${user.conversionsLeft}`);
-      }
-      // If canceled, set plan to free at period end, conversions remain
+      // If canceled, set plan to free immediately, conversions remain
       if (subscription.status === 'canceled') {
         user.plan = 'free';
         user.pendingPlan = undefined;
         // conversionsLeft remains unchanged
         console.log(`[WEBHOOK] User ${user.email} subscription canceled. Plan set to free, conversions remain: ${user.conversionsLeft}`);
+      } else if (user.pendingPlan && subscription.cancel_at_period_end) {
+        user.plan = user.pendingPlan;
+        user.pendingPlan = undefined;
+        // conversionsLeft remains unchanged
+        console.log(`[WEBHOOK] User ${user.email} downgraded to ${user.plan} at period end. Conversions remain: ${user.conversionsLeft}`);
       }
       await user.save();
       console.log(`[WEBHOOK] User ${user.email} subscription updated: ${subscription.status}`);
