@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import PhotopeaService from '../services/photopeaService.js';
+import { conversionJobs } from '../index.js';
 
 const router = express.Router();
 
@@ -45,9 +46,92 @@ const upload = multer({
   }
 });
 
-// Route that matches frontend expectation
-router.post('/convert', upload.single('pdf'), async (req, res) => {
+
+
+// Route that matches frontend expectation - accepts jobId
+router.post('/convert', async (req, res) => {
   console.log("🎯 /api/convert route hit!");
+  console.log("📋 Request body:", req.body);
+  
+  const { jobId } = req.body;
+  
+  if (!jobId) {
+    return res.status(400).json({ error: 'No jobId provided' });
+  }
+  
+  if (!conversionJobs.has(jobId)) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  const job = conversionJobs.get(jobId);
+  console.log("📁 Job found:", job);
+  
+  if (!job.filePath || !fs.existsSync(job.filePath)) {
+    return res.status(404).json({ error: 'Job file not found' });
+  }
+
+  const pdfPath = job.filePath;
+  const outputPath = path.join('uploads', `${Date.now()}-converted.psd`);
+
+  try {
+    console.log("🔄 Starting PDF to PSD conversion with PhotopeaService...");
+    console.log("📂 PDF path:", pdfPath);
+    console.log("📂 Output path:", outputPath);
+    
+    // Update job status
+    job.status = 'processing';
+    job.startedAt = new Date();
+    conversionJobs.set(jobId, job);
+    
+    const service = new PhotopeaService();
+    await service.convertPDFToPSD(pdfPath, outputPath, (progress, message) => {
+      console.log(`[${progress}%] ${message}`);
+      // Update job progress
+      job.progress = progress;
+      job.message = message;
+      conversionJobs.set(jobId, job);
+    });
+
+    console.log("✅ Conversion completed, sending file...");
+    
+    // Update job with success info
+    job.status = 'completed';
+    job.progress = 100;
+    job.message = 'Conversion completed successfully';
+    job.completedAt = new Date();
+    job.outputPath = outputPath;
+    conversionJobs.set(jobId, job);
+    
+    res.download(outputPath, err => {
+      if (err) {
+        console.error("❌ Download error:", err);
+      }
+      // Clean up files after download
+      try {
+        fs.unlinkSync(pdfPath);
+        fs.unlinkSync(outputPath);
+      } catch (cleanupError) {
+        console.error("⚠️ Cleanup error:", cleanupError);
+      }
+    });
+  } catch (err) {
+    console.error("❌ Conversion error:", err.message);
+    
+    // Update job with error info
+    job.status = 'error';
+    job.error = err.message;
+    job.progress = 0;
+    job.message = `Conversion failed: ${err.message}`;
+    job.completedAt = new Date();
+    conversionJobs.set(jobId, job);
+    
+    res.status(500).json({ error: 'Conversion failed: ' + err.message });
+  }
+});
+
+// Route for direct file upload (alternative approach)
+router.post('/convert/file', upload.single('pdf'), async (req, res) => {
+  console.log("🎯 /api/convert/file route hit!");
   console.log("📁 Request files:", req.files);
   console.log("📄 Request file:", req.file);
   console.log("📋 Request body:", req.body);

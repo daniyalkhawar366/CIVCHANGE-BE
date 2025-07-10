@@ -110,7 +110,7 @@ const upload = multer({
 });
 
 // Store conversion jobs with enhanced structure
-const conversionJobs = new Map();
+export const conversionJobs = new Map();
 
 // Health check endpoint
 app.get('/', (req, res) => {
