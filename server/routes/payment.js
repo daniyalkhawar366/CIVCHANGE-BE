@@ -42,20 +42,22 @@ const PRICE_IDS = {
 // { plan: 'premium' } // for Business ($99)
 // ===========================
 
-// Helper to get plan rank
+// Helper to get plan rank (use lowercase)
 function planRank(plan) {
-  if (plan === 'Starter') return 1;
-  if (plan === 'Pro') return 2;
-  if (plan === 'Business') return 3;
-  if (plan === 'enterprise') return 4;
+  if (!plan) return 0;
+  const p = plan.toLowerCase();
+  if (p === 'basic') return 1;
+  if (p === 'pro') return 2;
+  if (p === 'premium') return 3;
+  if (p === 'enterprise') return 4;
   return 0;
 }
 
 // Conversion limits per plan
 const PLAN_LIMITS = {
-  Starter: 20,
-  Pro: 50,
-  Business: 200
+  basic: 20,
+  pro: 50,
+  premium: 200
 };
 
 // POST /api/payments/create-checkout
@@ -115,7 +117,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const userId = session.metadata.userId;
-    const plan = session.metadata.plan;
+    let plan = session.metadata.plan;
+    plan = plan ? plan.toLowerCase() : plan;
     try {
       const user = await Usermodel.findById(userId);
       if (!user) return res.status(404).send('User not found');
@@ -124,9 +127,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       // If user is not active (new purchase or after cancel), add conversions
       if (user.subscriptionStatus !== 'active') {
         user.conversionsLeft = (user.conversionsLeft || 0) + newConversions;
+        console.log(`[WEBHOOK] User ${user.email} repurchased or bought new plan ${plan}. Added conversions: ${newConversions}, total now: ${user.conversionsLeft}`);
       } else if (planRank(plan) > planRank(user.plan)) {
         // If upgrading, set conversionsLeft to new plan's limit
         user.conversionsLeft = newConversions;
+        console.log(`[WEBHOOK] User ${user.email} upgraded to ${plan}. Set conversionsLeft to: ${newConversions}`);
       }
       user.plan = plan;
       user.stripeCustomerId = session.customer;
@@ -134,7 +139,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       user.subscriptionStatus = 'active';
       user.pendingPlan = undefined;
       await user.save();
-      console.log(`User ${user.email} subscribed to ${plan}`);
+      console.log(`[WEBHOOK] User ${user.email} subscribed to ${plan}`);
     } catch (err) {
       console.error('Failed to update user after payment:', err);
       return res.status(500).send('Failed to update user');
@@ -153,17 +158,19 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       // Handle downgrade at period end
       if (user.pendingPlan && subscription.cancel_at_period_end) {
         user.plan = user.pendingPlan;
-        user.conversionsLeft = user.plan === 'free' ? 1 : PLAN_LIMITS[user.plan];
         user.pendingPlan = undefined;
+        // conversionsLeft remains unchanged
+        console.log(`[WEBHOOK] User ${user.email} downgraded to ${user.plan} at period end. Conversions remain: ${user.conversionsLeft}`);
       }
-      // If canceled, set plan to free at period end
+      // If canceled, set plan to free at period end, conversions remain
       if (subscription.status === 'canceled') {
         user.plan = 'free';
-        user.conversionsLeft = 1;
         user.pendingPlan = undefined;
+        // conversionsLeft remains unchanged
+        console.log(`[WEBHOOK] User ${user.email} subscription canceled. Plan set to free, conversions remain: ${user.conversionsLeft}`);
       }
       await user.save();
-      console.log(`User ${user.email} subscription updated: ${subscription.status}`);
+      console.log(`[WEBHOOK] User ${user.email} subscription updated: ${subscription.status}`);
     } catch (err) {
       console.error('Failed to update user after subscription event:', err);
       return res.status(500).send('Failed to update user');
