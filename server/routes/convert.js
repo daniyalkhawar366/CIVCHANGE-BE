@@ -1,3 +1,5 @@
+console.log("🚀 convert.js route loaded");
+
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -26,5 +28,10 @@ router.post('/convert/pdf-to-psd', upload.single('pdf'), async (req, res) => {
     res.status(500).json({ error: 'Conversion failed' });
   }
 });
+
+router.get('/test-route', (req, res) => {
+  res.send('Convert route is working');
+});
+
 
 export default router;
