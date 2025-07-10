@@ -58,8 +58,20 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Register Stripe webhook route BEFORE body parsers
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
+dotenv.config();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
+
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), PaymentRoutes.stack.find(r => r.route && r.route.path === '/webhook').route.stack[0].handle);
+
+// Now register body parsers
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Register all other payment routes (except webhook)
+app.use('/api/payments', PaymentRoutes);
 
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
@@ -69,7 +81,6 @@ app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
 app.use('/auth', AuthRoutes);
 app.use('/admin', AdminRoutes);
 app.use('/api', ConvertRoutes);
-app.use('/api/payments', PaymentRoutes);
 app.use('/api/user', UserRoutes);
 
 
