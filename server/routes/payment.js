@@ -129,9 +129,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         user.conversionsLeft = (user.conversionsLeft || 0) + newConversions;
         console.log(`[WEBHOOK] User ${user.email} repurchased or bought new plan ${plan}. Added conversions: ${newConversions}, total now: ${user.conversionsLeft}`);
       } else if (planRank(plan) > planRank(user.plan)) {
-        // If upgrading, set conversionsLeft to new plan's limit
-        user.conversionsLeft = newConversions;
-        console.log(`[WEBHOOK] User ${user.email} upgraded to ${plan}. Set conversionsLeft to: ${newConversions}`);
+        // If upgrading, add new plan's conversions to existing
+        user.conversionsLeft = (user.conversionsLeft || 0) + newConversions;
+        console.log(`[WEBHOOK] User ${user.email} upgraded to ${plan}. Added conversions: ${newConversions}, total now: ${user.conversionsLeft}`);
       }
       user.plan = plan;
       user.stripeCustomerId = session.customer;
@@ -232,8 +232,13 @@ router.post('/cancel-subscription', requireAuth, async (req, res) => {
     user.subscriptionStatus = 'canceled';
     user.subscriptionEndDate = new Date(canceled.current_period_end * 1000);
     user.pendingPlan = 'free';
+    // Immediately set plan to free and clear pendingPlan
+    user.plan = 'free';
+    user.pendingPlan = undefined;
+    // conversionsLeft remains unchanged
     await user.save();
-    res.json({ message: 'Subscription will be canceled at period end.', endDate: user.subscriptionEndDate });
+    console.log(`[CANCEL] User ${user.email} canceled subscription. Plan set to free, conversions remain: ${user.conversionsLeft}`);
+    res.json({ message: 'Subscription will be canceled at period end. Plan set to free immediately.', endDate: user.subscriptionEndDate });
   } catch (err) {
     console.error('Stripe cancel error:', err);
     res.status(500).json({ error: 'Failed to cancel subscription', details: err.message });
