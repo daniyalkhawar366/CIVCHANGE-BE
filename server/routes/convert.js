@@ -13,16 +13,27 @@ import jwt from 'jsonwebtoken';
 // Middleware to require authentication and attach user to req.user
 async function requireAuth(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+  if (!authHeader) {
+    console.log('No auth header');
+    return res.status(401).json({ error: 'No token provided' });
+  }
   const token = authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+  if (!token) {
+    console.log('No token in header');
+    return res.status(401).json({ error: 'No token provided' });
+  }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Decoded JWT:', decoded); // <--- Add this
     const user = await Usermodel.findById(decoded.id);
-    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (!user) {
+      console.log('User not found for id:', decoded.id); // <--- Add this
+      return res.status(401).json({ error: 'User not found' });
+    }
     req.user = user;
     next();
   } catch (err) {
+    console.log('JWT error:', err); // <--- Add this
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
