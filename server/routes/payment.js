@@ -37,18 +37,18 @@ const PRICE_IDS = {
 
 // Helper to get plan rank
 function planRank(plan) {
-  if (plan === 'basic') return 1;
-  if (plan === 'pro') return 2;
-  if (plan === 'premium') return 3;
+  if (plan === 'Starter') return 1;
+  if (plan === 'Pro') return 2;
+  if (plan === 'Business') return 3;
   if (plan === 'enterprise') return 4;
   return 0;
 }
 
 // Conversion limits per plan
 const PLAN_LIMITS = {
-  basic: 20,
-  pro: 50,
-  premium: 200
+  Starter: 20,
+  Pro: 50,
+  Business: 200
 };
 
 // POST /api/payments/create-checkout
