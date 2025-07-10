@@ -7,6 +7,25 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import BasicPdfService from '../services/basicPdfService.js';
 import { conversionJobs } from '../index.js';
+import { Usermodel } from '../models/User.js';
+import jwt from 'jsonwebtoken';
+
+// Middleware to require authentication and attach user to req.user
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await Usermodel.findById(decoded.id);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
 
 const router = express.Router();
 
@@ -47,7 +66,7 @@ const upload = multer({
 });
 
 // Route that matches frontend expectation - accepts jobId
-router.post('/convert', async (req, res) => {
+router.post('/convert', requireAuth, async (req, res) => {
   console.log("🎯 /api/convert route hit!");
   console.log("📋 Request body:", req.body);
   
@@ -67,6 +86,16 @@ router.post('/convert', async (req, res) => {
   if (!job.filePath || !fs.existsSync(job.filePath)) {
     return res.status(404).json({ error: 'Job file not found' });
   }
+
+  // ENFORCE CONVERSION LIMITS
+  const user = req.user;
+  if (user.plan === 'free' && user.conversionsLeft < 1) {
+    return res.status(403).json({ error: 'Free plan: Only 1 conversion allowed. Please upgrade.' });
+  }
+  if (['basic', 'pro', 'premium'].includes(user.plan) && user.conversionsLeft < 1) {
+    return res.status(403).json({ error: 'No conversions left. Please upgrade your plan.' });
+  }
+  // For enterprise, you may want to allow unlimited or custom logic
 
   const pdfPath = job.filePath;
   const outputPath = path.join('uploads', `${Date.now()}-converted.psd`);
@@ -99,6 +128,12 @@ router.post('/convert', async (req, res) => {
     job.completedAt = new Date();
     job.outputPath = outputPath;
     conversionJobs.set(jobId, job);
+
+    // DECREMENT conversionsLeft
+    if (user.plan === 'free' || ['basic', 'pro', 'premium'].includes(user.plan)) {
+      user.conversionsLeft = Math.max(0, user.conversionsLeft - 1);
+      await user.save();
+    }
     
     res.download(outputPath, err => {
       if (err) {
@@ -189,6 +224,17 @@ router.post('/convert/pdf-to-psd', upload.single('pdf'), async (req, res) => {
     console.error(err.message);
     res.status(500).json({ error: 'Conversion failed' });
   }
+});
+
+// Pricing endpoint
+router.get('/pricing', (req, res) => {
+  const plans = [
+    { id: 'basic', name: 'Basic', price: 10, conversions: 20 },
+    { id: 'pro', name: 'Pro', price: 29, conversions: 50 },
+    { id: 'premium', name: 'Premium', price: 99, conversions: 200 },
+    { id: 'enterprise', name: 'Enterprise', price: null, conversions: null, custom: true }
+  ];
+  res.json({ plans });
 });
 
 router.get('/test-route', (req, res) => {

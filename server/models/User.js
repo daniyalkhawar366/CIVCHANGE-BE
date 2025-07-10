@@ -29,6 +29,18 @@ const userShcema= new mongoose.Schema({
         enum: ['user', 'admin'],
         default: 'user'
     },
+    plan: {
+        type: String,
+        enum: ['free', 'basic', 'pro', 'premium', 'enterprise'],
+        default: 'free'
+    },
+    conversionsLeft: {
+        type: Number,
+        default: 1
+    },
+    stripeCustomerId: {
+        type: String
+    },
     resetPasswordToken:String,
     resetPasswordExpiresAt:Date,
     verficationToken:String,
