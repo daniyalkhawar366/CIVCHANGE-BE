@@ -28,12 +28,19 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Stripe price IDs (replace with your real Stripe price IDs)
+// Stripe price IDs (use lowercase keys to match frontend)
 const PRICE_IDS = {
-  Starter: 'price_1RjGSnPrec2YpLNj8oph41sa', // $10
-  Pro: 'price_1RjGTMPrec2YpLNjO7wj82r1',     // $29
-  Business: 'price_1RjGTjPrec2YpLNjUVF74uJR' // $99
+  basic: 'price_1RjGSnPrec2YpLNj8oph41sa',    // Starter
+  pro: 'price_1RjGTMPrec2YpLNjO7wj82r1',      // Pro
+  premium: 'price_1RjGTjPrec2YpLNjUVF74uJR'   // Business
 };
+
+// === FRONTEND TEAM PROMPT ===
+// When calling /api/payments/create-checkout or /api/payments/upgrade, use one of these plan names in the request body:
+// { plan: 'basic' }   // for Starter ($10)
+// { plan: 'pro' }     // for Pro ($29)
+// { plan: 'premium' } // for Business ($99)
+// ===========================
 
 // Helper to get plan rank
 function planRank(plan) {
