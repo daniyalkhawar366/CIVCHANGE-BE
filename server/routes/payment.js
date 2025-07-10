@@ -30,9 +30,9 @@ async function requireAuth(req, res, next) {
 
 // Stripe price IDs (replace with your real Stripe price IDs)
 const PRICE_IDS = {
-  basic: 'price_basic_id', // $10
-  pro: 'price_pro_id',     // $29
-  premium: 'price_premium_id' // $99
+  basic: 'price_1RjGSnPrec2YpLNj8oph41sa', // $10
+  pro: 'price_1RjGTMPrec2YpLNjO7wj82r1',     // $29
+  premium: 'price_1RjGTjPrec2YpLNjUVF74uJR' // $99
 };
 
 // Helper to get plan rank
