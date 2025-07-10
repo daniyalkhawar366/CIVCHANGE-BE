@@ -60,16 +60,11 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid plan selected' });
   }
 
-  // Prevent if user already has a paid plan
-  if (['basic', 'pro', 'premium', 'enterprise'].includes(user.plan)) {
-    return res.status(403).json({ error: 'You already have a plan. Please use upgrade.' });
-  }
-
   const priceId = PRICE_IDS[plan];
+  console.log('Stripe Checkout Debug:', { plan, priceId }); // Debug print
   if (!priceId) return res.status(400).json({ error: 'Plan not available' });
 
   try {
-    // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -90,7 +85,7 @@ router.post('/create-checkout', requireAuth, async (req, res) => {
     res.json({ url: session.url });
   } catch (err) {
     console.error('Stripe error:', err);
-    res.status(500).json({ error: 'Failed to create checkout session' });
+    res.status(500).json({ error: 'Failed to create checkout session', details: err.message });
   }
 });
 
