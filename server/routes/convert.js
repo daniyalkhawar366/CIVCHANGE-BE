@@ -5,7 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import SimplePhotopeaService from '../services/simplePhotopeaService.js';
+import BasicPdfService from '../services/basicPdfService.js';
 import { conversionJobs } from '../index.js';
 
 const router = express.Router();
@@ -72,7 +72,7 @@ router.post('/convert', async (req, res) => {
   const outputPath = path.join('uploads', `${Date.now()}-converted.psd`);
 
   try {
-    console.log("🔄 Starting PDF to PSD conversion with SimplePhotopeaService...");
+    console.log("🔄 Starting PDF to PSD conversion with BasicPdfService...");
     console.log("📂 PDF path:", pdfPath);
     console.log("📂 Output path:", outputPath);
     
@@ -81,7 +81,7 @@ router.post('/convert', async (req, res) => {
     job.startedAt = new Date();
     conversionJobs.set(jobId, job);
     
-    const service = new SimplePhotopeaService();
+    const service = new BasicPdfService();
     await service.convertPDFToPSD(pdfPath, outputPath, (progress, message) => {
       console.log(`[${progress}%] ${message}`);
       // Update job progress
@@ -142,11 +142,11 @@ router.post('/convert/file', upload.single('pdf'), async (req, res) => {
   const outputPath = path.join('uploads', `${Date.now()}-converted.psd`);
 
   try {
-    console.log("🔄 Starting PDF to PSD conversion with SimplePhotopeaService...");
+    console.log("🔄 Starting PDF to PSD conversion with BasicPdfService...");
     console.log("📂 PDF path:", pdfPath);
     console.log("📂 Output path:", outputPath);
     
-    const service = new SimplePhotopeaService();
+    const service = new BasicPdfService();
     await service.convertPDFToPSD(pdfPath, outputPath, (progress, message) => {
       console.log(`[${progress}%] ${message}`);
     });
@@ -176,7 +176,7 @@ router.post('/convert/pdf-to-psd', upload.single('pdf'), async (req, res) => {
   const outputPath = path.join('uploads', `${Date.now()}-converted.psd`);
 
   try {
-    const service = new SimplePhotopeaService();
+    const service = new BasicPdfService();
     await service.convertPDFToPSD(pdfPath, outputPath, (p, msg) => {
       console.log(`[${p}%] ${msg}`);
     });
