@@ -148,7 +148,7 @@ router.post('/convert', requireAuth, checkApiHealth, async (req, res) => {
     const service = new PhotopeaService();
     
     // Convert PDF to PSD with progress tracking
-    const result = await service.convertPDFToPSD(pdfPath, outputPath, (progress, message) => {
+    const result = await service.convertWithScript(pdfPath, outputPath, (progress, message) => {
       console.log(`[${progress}%] ${message}`);
       
       // Update job progress
