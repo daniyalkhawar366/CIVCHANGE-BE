@@ -5,7 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import PhotopeaService from '../services/PhotopeaService.js';
+import PhotopeaService from '../services/photopeaService.js';
 import { conversionJobs } from '../index.js';
 import { Usermodel } from '../models/User.js';
 import jwt from 'jsonwebtoken';

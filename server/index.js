@@ -33,7 +33,7 @@ import AdminRoutes from './routes/Admin.routes.js';
 import ConvertRoutes from './routes/convert.js';
 import PaymentRoutes from './routes/payment.js';
 import UserRoutes from './routes/user.js';
-import PhotopeaService from './services/PhotopeaService.js';
+import PhotopeaService from './services/photopeaService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const PORT = process.env.PORT || 5000;
