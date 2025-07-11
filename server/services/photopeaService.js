@@ -138,22 +138,28 @@ class PhotopeaService {
 
       progressCallback(70, 'Processing script result...');
       
-      const result = await response.json();
-      
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (err) {
+        console.error('Photopea script API non-JSON response:', text);
+        throw new Error('Photopea script API returned non-JSON response');
+      }
       if (result.error) {
         throw new Error(`Photopea script error: ${result.error}`);
       }
 
       progressCallback(90, 'Downloading converted file...');
-      
+
       // Download the converted file
       const fileResponse = await fetch(result.fileUrl);
       const buffer = await fileResponse.buffer();
-      
+
       fs.writeFileSync(outputPath, buffer);
-      
+
       progressCallback(100, 'Script conversion completed');
-      
+
       return {
         success: true,
         outputPath,
