@@ -1,83 +1,203 @@
-import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
-import PhotopeaApiFallback from './photopeaApiFallback.js';
+import FormData from 'form-data';
+import fetch from 'node-fetch';
 
 class PhotopeaService {
   constructor() {
-    this.browser = null;
-    this.page = null;
-  }
-
-  async initialize() {
-    try {
-      const launchOptions = {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
-        ]
-      };
-
-      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      }
-
-      this.browser = await puppeteer.launch(launchOptions);
-      this.page = await this.browser.newPage();
-      await this.page.setViewport({ width: 1920, height: 1080 });
-      await this.page.goto('https://www.photopea.com/', { waitUntil: 'networkidle2', timeout: 30000 });
-      await this.page.waitForSelector('#app', { timeout: 30000 });
-    } catch (error) {
-      console.error('Puppeteer init failed, switching to fallback:', error.message);
-      throw error;
-    }
+    this.apiUrl = 'https://www.photopea.com/api/';
+    this.maxRetries = 3;
+    this.retryDelay = 2000;
   }
 
   async convertPDFToPSD(pdfPath, outputPath, progressCallback = () => {}) {
     try {
-      if (!this.page) await this.initialize();
+      progressCallback(5, 'Initializing Photopea API...');
+      
+      // Validate input file
+      if (!fs.existsSync(pdfPath)) {
+        throw new Error('PDF file not found');
+      }
 
-      progressCallback(10, 'Uploading to Photopea (Puppeteer)...');
-      const inputElement = await this.page.$('input[type="file"]');
-      if (!inputElement) throw new Error('File input not found');
+      const fileStats = fs.statSync(pdfPath);
+      const fileSizeKB = Math.round(fileStats.size / 1024);
+      console.log(`Processing PDF: ${fileSizeKB}KB`);
 
-      await inputElement.uploadFile(pdfPath);
-      progressCallback(30, 'PDF uploaded');
+      progressCallback(10, 'Uploading PDF to Photopea...');
+      
+      // Create form data for upload
+      const formData = new FormData();
+      formData.append('file', fs.createReadStream(pdfPath));
+      formData.append('format', 'psd');
+      formData.append('quality', '100');
+      
+      // Upload and convert using Photopea API
+      const response = await this.makeApiRequest(formData, progressCallback);
+      
+      progressCallback(80, 'Processing conversion response...');
+      
+      // Handle response
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Photopea API error: ${response.status} - ${errorText}`);
+      }
 
-      await this.page.waitForTimeout(5000); // wait for PDF load
-      progressCallback(60, 'Exporting to PSD...');
+      progressCallback(90, 'Saving PSD file...');
+      
+      // Save the PSD file
+      const buffer = await response.buffer();
+      if (buffer.length === 0) {
+        throw new Error('Received empty PSD file from Photopea');
+      }
 
-      const psdData = await this.page.evaluate(() => {
-        return app.activeDocument.saveToOE("psd");
-      });
+      fs.writeFileSync(outputPath, buffer);
+      
+      progressCallback(100, 'Conversion completed successfully');
+      
+      return {
+        success: true,
+        outputPath,
+        fileSize: buffer.length,
+        fileSizeKB: Math.round(buffer.length / 1024),
+        message: 'PDF converted to PSD successfully'
+      };
 
-      if (!psdData?.data) throw new Error('Empty PSD data');
-
-      fs.writeFileSync(outputPath, Buffer.from(psdData.data));
-      progressCallback(100, 'Saved successfully');
     } catch (error) {
-      console.error('[Puppeteer Error]:', error.message);
-      progressCallback(70, 'Falling back to API...');
-      const fallback = new PhotopeaApiFallback();
-      await fallback.convertWithApi(pdfPath, outputPath, progressCallback);
-    } finally {
-      await this.close();
+      console.error('PhotopeaService conversion error:', error);
+      throw new Error(`Conversion failed: ${error.message}`);
     }
   }
 
-  async close() {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      this.page = null;
+  async makeApiRequest(formData, progressCallback) {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        progressCallback(10 + (attempt * 20), `Attempt ${attempt}/${this.maxRetries} - Calling Photopea API...`);
+        
+        const response = await fetch(this.apiUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            ...formData.getHeaders(),
+            'User-Agent': 'PDF-to-PSD-Converter/1.0'
+          },
+          timeout: 120000 // 2 minutes timeout
+        });
+
+        if (response.ok) {
+          return response;
+        }
+
+        lastError = new Error(`API request failed: ${response.status}`);
+        
+      } catch (error) {
+        lastError = error;
+        console.error(`Attempt ${attempt} failed:`, error.message);
+        
+        if (attempt < this.maxRetries) {
+          progressCallback(10 + (attempt * 20), `Retrying in ${this.retryDelay/1000} seconds...`);
+          await this.sleep(this.retryDelay);
+        }
+      }
+    }
+    
+    throw lastError;
+  }
+
+  async convertWithScript(pdfPath, outputPath, progressCallback = () => {}) {
+    try {
+      progressCallback(5, 'Initializing Photopea script conversion...');
+      
+      // Alternative method using Photopea's scripting API
+      const script = `
+        app.open("${pdfPath}");
+        app.activeDocument.saveAs("${outputPath}", SaveOptions.PHOTOSHOP);
+        app.activeDocument.close();
+      `;
+
+      const formData = new FormData();
+      formData.append('script', script);
+      formData.append('file', fs.createReadStream(pdfPath));
+
+      progressCallback(30, 'Executing Photopea script...');
+      
+      const response = await fetch('https://www.photopea.com/api/script', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          ...formData.getHeaders()
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Script execution failed: ${response.status}`);
+      }
+
+      progressCallback(70, 'Processing script result...');
+      
+      const result = await response.json();
+      
+      if (result.error) {
+        throw new Error(`Photopea script error: ${result.error}`);
+      }
+
+      progressCallback(90, 'Downloading converted file...');
+      
+      // Download the converted file
+      const fileResponse = await fetch(result.fileUrl);
+      const buffer = await fileResponse.buffer();
+      
+      fs.writeFileSync(outputPath, buffer);
+      
+      progressCallback(100, 'Script conversion completed');
+      
+      return {
+        success: true,
+        outputPath,
+        fileSize: buffer.length,
+        message: 'PDF converted to PSD using script method'
+      };
+
+    } catch (error) {
+      console.error('Script conversion error:', error);
+      throw error;
+    }
+  }
+
+  async sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Health check method
+  async checkApiHealth() {
+    try {
+      const response = await fetch(this.apiUrl, {
+        method: 'GET',
+        timeout: 10000
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Photopea API health check failed:', error);
+      return false;
+    }
+  }
+
+  // Get API status and limits
+  async getApiStatus() {
+    try {
+      const response = await fetch(`${this.apiUrl}status`, {
+        method: 'GET',
+        timeout: 10000
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+      
+      return { available: false, error: 'API not available' };
+    } catch (error) {
+      return { available: false, error: error.message };
     }
   }
 }

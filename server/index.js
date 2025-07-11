@@ -33,17 +33,38 @@ import AdminRoutes from './routes/Admin.routes.js';
 import ConvertRoutes from './routes/convert.js';
 import PaymentRoutes from './routes/payment.js';
 import UserRoutes from './routes/user.js';
+import PhotopeaService from './services/PhotopeaService.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const PORT = process.env.PORT || 5000;
 
 // Debug: Check if environment variables are loaded
 console.log('Environment check:');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
+console.log('STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY ? 'Set' : 'Not set');
 console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
 const app = express();
 const server = createServer(app);
+
+// Initialize Socket.IO with enhanced configuration
+const io = new Server(server, {
+  cors: {
+    origin: [
+      FRONTEND_URL,
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://civchange-fe.vercel.app'
+    ],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000
+});
+
+// Make io available globally for conversion progress updates
+global.io = io;
 
 // Enhanced CORS configuration
 app.use(cors({
@@ -51,7 +72,7 @@ app.use(cors({
     FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://civchange-fe.vercel.app' // Add your production domain
+    'https://civchange-fe.vercel.app'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -62,25 +83,15 @@ app.use(cors({
 import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), PaymentRoutes.stack.find(r => r.route && r.route.path === '/webhook').route.stack[0].handle);
+// Find and register webhook route before body parsers
+const webhookRoute = PaymentRoutes.stack.find(r => r.route && r.route.path === '/webhook');
+if (webhookRoute) {
+  app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookRoute.route.stack[0].handle);
+}
 
 // Now register body parsers
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// Register all other payment routes (except webhook)
-app.use('/api/payments', PaymentRoutes);
-
-// Serve static files
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
-app.use('/downloads', express.static(path.join(__dirname, '..', 'downloads')));
-
-// Routes
-app.use('/auth', AuthRoutes);
-app.use('/admin', AdminRoutes);
-app.use('/api', ConvertRoutes);
-app.use('/api/user', UserRoutes);
-
 
 // Create directories if they don't exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -90,10 +101,15 @@ const tempDir = path.join(__dirname, '..', 'temp');
 [uploadsDir, downloadsDir, tempDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
+    console.log(`📁 Created directory: ${dir}`);
   }
 });
 
-// Enhanced multer configuration
+// Serve static files
+app.use('/uploads', express.static(uploadsDir));
+app.use('/downloads', express.static(downloadsDir));
+
+// Enhanced multer configuration for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -122,107 +138,49 @@ const upload = multer({
   }
 });
 
-// Store conversion jobs with enhanced structure
+// Global conversion jobs Map (shared with convert routes)
 export const conversionJobs = new Map();
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  console.log('Health check hit');
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'Canva to PSD Converter Backend is running',
-    version: '2.0.0',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Enhanced API routes
+// File upload endpoint with job creation
 app.post('/api/upload', upload.single('pdf'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+  console.log("📤 File upload endpoint hit");
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No PDF file uploaded' });
+  }
 
-    // Validate file size and type
-    const fileSizeKB = Math.round(req.file.size / 1024);
-    console.log(`File uploaded: ${req.file.originalname}, Size: ${fileSizeKB}KB`);
-    
+  try {
     const jobId = uuidv4();
-    const filePath = req.file.path;
-    const originalFileName = req.file.originalname;
-    
-    // Enhanced job info
-    const jobInfo = {
-      status: 'pending',
-      filePath,
-      originalFileName,
+    const job = {
+      id: jobId,
+      status: 'uploaded',
+      originalFileName: req.file.originalname,
+      filePath: req.file.path,
       fileSize: req.file.size,
-      fileSizeKB,
-      createdAt: new Date(),
+      uploadedAt: new Date(),
       progress: 0,
       message: 'File uploaded successfully'
     };
+
+    conversionJobs.set(jobId, job);
     
-    conversionJobs.set(jobId, jobInfo);
+    console.log(`📋 Created job ${jobId} for file: ${req.file.originalname}`);
     
-    res.json({ 
-      jobId, 
-      message: 'File uploaded successfully',
-      fileName: originalFileName,
-      fileSize: fileSizeKB,
-      status: 'ready_for_conversion'
+    res.json({
+      success: true,
+      jobId: jobId,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      message: 'File uploaded successfully'
     });
-    
+
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Upload error:', error);
+    res.status(500).json({ error: 'Upload failed: ' + error.message });
   }
 });
 
-/*app.post('/api/convert', async (req, res) => {
-  try {
-    const { jobId, enhanced = false } = req.body;
-    
-    if (!jobId || !conversionJobs.has(jobId)) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
-    
-    const job = conversionJobs.get(jobId);
-    
-    if (job.status !== 'pending') {
-      return res.status(400).json({ error: 'Job is not in pending state' });
-    }
-    
-    // Update job status
-    job.status = 'processing';
-    job.startedAt = new Date();
-    conversionJobs.set(jobId, job);
-    
-    // Start conversion process asynchronously
-    convertPDFToPSD(job.filePath, jobId, io, job.originalFileName, enhanced)
-      .catch(error => {
-        console.error('Conversion process error:', error);
-        const failedJob = conversionJobs.get(jobId);
-        if (failedJob) {
-          failedJob.status = 'error';
-          failedJob.error = error.message;
-          failedJob.completedAt = new Date();
-          conversionJobs.set(jobId, failedJob);
-        }
-      });
-    
-    res.json({ 
-      message: 'Conversion started',
-      jobId,
-      enhanced
-    });
-    
-  } catch (error) {
-    console.error('Convert endpoint error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});*/
-
+// Job status endpoint
 app.get('/api/job/:jobId', (req, res) => {
   const { jobId } = req.params;
   
@@ -231,225 +189,184 @@ app.get('/api/job/:jobId', (req, res) => {
   }
   
   const job = conversionJobs.get(jobId);
-  res.json(job);
+  res.json({
+    jobId: job.id,
+    status: job.status,
+    progress: job.progress,
+    message: job.message,
+    fileName: job.originalFileName,
+    downloadUrl: job.downloadUrl,
+    error: job.error,
+    uploadedAt: job.uploadedAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt
+  });
 });
 
-app.delete('/api/job/:jobId', (req, res) => {
-  const { jobId } = req.params;
-  
-  if (!conversionJobs.has(jobId)) {
-    return res.status(404).json({ error: 'Job not found' });
-  }
-  
-  const job = conversionJobs.get(jobId);
-  
-  // Clean up files
-  if (job.filePath && fs.existsSync(job.filePath)) {
-    fs.unlinkSync(job.filePath);
-  }
-  
-  if (job.outputPath && fs.existsSync(job.outputPath)) {
-    fs.unlinkSync(job.outputPath);
-  }
-  
-  conversionJobs.delete(jobId);
-  res.json({ message: 'Job deleted successfully' });
-});
+// Routes registration
+app.use('/auth', AuthRoutes);
+app.use('/admin', AdminRoutes);
+app.use('/api', ConvertRoutes);
+app.use('/api/user', UserRoutes);
+app.use('/api/payments', PaymentRoutes);
 
-// Get all jobs (for admin/debugging)
-app.get('/api/jobs', (req, res) => {
-  const jobs = Array.from(conversionJobs.entries()).map(([id, job]) => ({
-    id,
-    ...job
-  }));
-  res.json(jobs);
-});
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log(`🔗 Client connected: ${socket.id}`);
 
-// Enhanced PDF to PSD conversion function
-/*async function convertPDFToPSD(pdfPath, jobId, socket, originalFileName, enhanced = false) {
-  let job = conversionJobs.get(jobId);
-  
-  try {
-    // Progress callback function
-    const progressCallback = (progress, message) => {
-      job.progress = progress;
-      job.message = message;
-      conversionJobs.set(jobId, job);
-      
-      socket.emit('conversion-progress', { 
-        jobId, 
-        status: message, 
-        progress: progress,
-        timestamp: new Date().toISOString()
+  // Join conversion job room for progress updates
+  socket.on('join-job', (jobId) => {
+    socket.join(jobId);
+    console.log(`👥 Client ${socket.id} joined job room: ${jobId}`);
+    
+    // Send current job status if available
+    if (conversionJobs.has(jobId)) {
+      const job = conversionJobs.get(jobId);
+      socket.emit('job-status', {
+        jobId: job.id,
+        status: job.status,
+        progress: job.progress,
+        message: job.message
       });
-    };
-    
-    progressCallback(0, 'Starting conversion...');
-    
-    // Validate input file
-    if (!fs.existsSync(pdfPath)) {
-      throw new Error('PDF file not found');
     }
+  });
+
+  // Leave job room
+  socket.on('leave-job', (jobId) => {
+    socket.leave(jobId);
+    console.log(`👋 Client ${socket.id} left job room: ${jobId}`);
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log(`🔌 Client disconnected: ${socket.id}`);
+  });
+});
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const service = new PhotopeaService();
+    const photopeaHealth = await service.checkApiHealth();
     
-    // Create output path
-    const baseFileName = originalFileName.replace(/\.pdf$/i, '');
-    const psdFileName = `${baseFileName}_converted.psd`;
-    const psdPath = path.join(downloadsDir, psdFileName);
-    
-    progressCallback(5, 'Initializing conversion service...');
-    
-    // Choose conversion method
-    let result;
-    if (enhanced) {
-      result = await pdfToPsdService.convertPdfToPsdWithLayerDetection(
-        pdfPath, 
-        psdPath, 
-        progressCallback
-      );
-    } else {
-      result = await pdfToPsdService.convertPdfToPsd(
-        pdfPath, 
-        psdPath, 
-        progressCallback
-      );
-    }
-    
-    // Update job with success info
-    job.status = 'completed';
-    job.progress = 100;
-    job.message = 'Conversion completed successfully';
-    job.downloadUrl = `/downloads/${psdFileName}`;
-    job.fileName = psdFileName;
-    job.completedAt = new Date();
-    job.outputPath = psdPath;
-    job.result = result;
-    
-    conversionJobs.set(jobId, job);
-    
-    socket.emit('conversion-progress', { 
-      jobId, 
-      status: 'completed', 
-      progress: 100,
-      downloadUrl: `/downloads/${psdFileName}`,
-      fileName: psdFileName,
-      result: result,
-      timestamp: new Date().toISOString()
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      photopea: photopeaHealth,
+      activeJobs: conversionJobs.size
     });
-    
-    console.log(`Conversion completed successfully for job ${jobId}`);
-    
-    // Clean up the uploaded PDF after successful conversion
-    if (fs.existsSync(pdfPath)) {
-      fs.unlinkSync(pdfPath);
-    }
-    
-    return psdPath;
-    
   } catch (error) {
-    console.error('Conversion error:', error);
-    
-    // Update job with error info
-    job.status = 'error';
-    job.error = error.message;
-    job.progress = 0;
-    job.message = `Conversion failed: ${error.message}`;
-    job.completedAt = new Date();
-    
-    conversionJobs.set(jobId, job);
-    
-    socket.emit('conversion-error', { 
-      jobId, 
-      status: 'error', 
-      progress: 0,
+    res.status(500).json({
+      status: 'unhealthy',
       error: error.message,
       timestamp: new Date().toISOString()
     });
-    
-    // Clean up on error
-    if (fs.existsSync(pdfPath)) {
-      fs.unlinkSync(pdfPath);
-    }
-    
-    throw error;
-  }
-}*/
-
-// Enhanced WebSocket handling
-const io = new Server(server, {
-  cors: {
-    origin: [FRONTEND_URL, 'http://localhost:3000', 'http://localhost:5173'],
-    methods: ["GET", "POST"],
-    credentials: true
   }
 });
 
-io.on('connection', (socket) => {
-  console.log('WebSocket client connected:', socket.id);
-  
-  socket.on('join-job', (jobId) => {
-    socket.join(jobId);
-    console.log(`Client ${socket.id} joined job ${jobId}`);
-  });
-  
-  socket.on('leave-job', (jobId) => {
-    socket.leave(jobId);
-    console.log(`Client ${socket.id} left job ${jobId}`);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('WebSocket client disconnected:', socket.id);
+// API documentation endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    service: 'PDF to PSD Converter API',
+    version: '1.0.0',
+    endpoints: {
+      upload: 'POST /api/upload',
+      convert: 'POST /api/convert',
+      convertDirect: 'POST /api/convert/direct',
+      jobStatus: 'GET /api/job/:jobId',
+      download: 'GET /api/download/:jobId',
+      health: 'GET /health',
+      pricing: 'GET /api/pricing'
+    },
+    websocket: {
+      events: ['join-job', 'leave-job', 'conversion-progress', 'conversion-complete', 'conversion-error']
+    }
   });
 });
 
-// Cleanup old jobs periodically (every hour)
-setInterval(() => {
-  const now = new Date();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  
-  for (const [jobId, job] of conversionJobs.entries()) {
-    if (job.createdAt < oneHourAgo) {
-      // Clean up old job files
-      if (job.filePath && fs.existsSync(job.filePath)) {
-        fs.unlinkSync(job.filePath);
-      }
-      if (job.outputPath && fs.existsSync(job.outputPath)) {
-        fs.unlinkSync(job.outputPath);
-      }
-      conversionJobs.delete(jobId);
-      console.log(`Cleaned up old job: ${jobId}`);
-    }
-  }
-}, 60 * 60 * 1000); // Run every hour
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Endpoint not found',
+    path: req.originalUrl,
+    method: req.method
+  });
+});
 
-// Error handling middleware
+// Global error handler
 app.use((error, req, res, next) => {
-  console.error('Express error:', error);
+  console.error('Global error handler:', error);
   
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: 'File too large. Maximum size is 100MB.' });
     }
+    return res.status(400).json({ error: 'File upload error: ' + error.message });
   }
   
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({
+    error: 'Internal server error',
+    message: error.message
+  });
 });
 
-// Initialize database and start server
-async function startServer() {
-  try {
-    await DbCon();
-    console.log('Database connected successfully');
-    
-    const PORT = process.env.PORT || 8080;
-    server.listen(PORT, () => {
-      console.log(`==== Server running on port ${PORT} ====`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
-    
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+// Cleanup old jobs periodically (every 30 minutes)
+setInterval(() => {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 30 * 60 * 1000); // 30 minutes ago
+  
+  for (const [jobId, job] of conversionJobs.entries()) {
+    if (job.completedAt && job.completedAt < cutoff) {
+      // Clean up old completed jobs
+      try {
+        if (job.filePath && fs.existsSync(job.filePath)) {
+          fs.unlinkSync(job.filePath);
+        }
+        if (job.outputPath && fs.existsSync(job.outputPath)) {
+          fs.unlinkSync(job.outputPath);
+        }
+        conversionJobs.delete(jobId);
+        console.log(`🧹 Cleaned up old job: ${jobId}`);
+      } catch (error) {
+        console.error(`⚠️ Error cleaning up job ${jobId}:`, error);
+      }
+    }
   }
-}
+}, 30 * 60 * 1000); // 30 minutes
 
-startServer();
+// Connect to database
+DbCon()
+  .then(() => {
+    console.log('✅ Database connected successfully');
+    
+    // Start server
+    server.listen(PORT, () => {
+      console.log(`🚀 Server is running on port ${PORT}`);
+      console.log(`📡 Frontend URL: ${FRONTEND_URL}`);
+      console.log(`🌐 API URL: http://localhost:${PORT}`);
+      console.log(`🔌 WebSocket URL: ws://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('❌ Database connection failed:', error);
+    process.exit(1);
+  });
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received. Shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
