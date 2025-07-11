@@ -131,7 +131,9 @@ class PhotopeaService {
       });
 
       if (!response.ok) {
-        throw new Error(`Script execution failed: ${response.status}`);
+        const text = await response.text();
+        console.error('Photopea script API error response:', text);
+        throw new Error(`Script execution failed: ${response.status} - ${text}`);
       }
 
       progressCallback(70, 'Processing script result...');
