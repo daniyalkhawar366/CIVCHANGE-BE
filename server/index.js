@@ -266,6 +266,11 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Root endpoint for health checks and basic info
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'API root' });
+});
+
 // API documentation endpoint
 app.get('/api', (req, res) => {
   res.json({
