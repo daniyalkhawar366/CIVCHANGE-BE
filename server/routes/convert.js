@@ -90,7 +90,7 @@ router.post('/convert', requireAuth, async (req, res) => {
   // ENFORCE CONVERSION LIMITS
   const user = req.user;
   if (user.plan === 'free' && user.conversionsLeft < 1) {
-    return res.status(403).json({ error: 'Free plan: Only 1 conversion allowed. Please upgrade.' });
+    return res.status(403).json({ error: '0 conversions left. Please upgrade.' });
   }
   if (['basic', 'pro', 'premium'].includes(user.plan) && user.conversionsLeft < 1) {
     return res.status(403).json({ error: 'No conversions left. Please upgrade your plan.' });
