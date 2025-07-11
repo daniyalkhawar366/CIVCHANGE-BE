@@ -191,16 +191,6 @@ router.post('/convert', requireAuth, checkApiHealth, async (req, res) => {
 
     // Emit completion via WebSocket
     if (global.io) {
-      // Emit final progress with completed status and downloadUrl
-      global.io.to(jobId).emit('conversion-progress', {
-        jobId,
-        status: 'completed',
-        downloadUrl: `/downloads/${psdFileName}`,
-        fileName: psdFileName,
-        result: result,
-        timestamp: new Date().toISOString()
-      });
-      // Also emit conversion-complete for clients that listen for it
       global.io.to(jobId).emit('conversion-complete', {
         jobId,
         status: 'completed',
