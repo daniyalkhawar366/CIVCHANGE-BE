@@ -5,7 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import PhotopeaService from '../services/photopeaService.js';
+import PdfToPsdService from '../services/PdfToPsdService.js';
 import { conversionJobs } from '../index.js';
 import { Usermodel } from '../models/User.js';
 import jwt from 'jsonwebtoken';
@@ -30,7 +30,7 @@ async function requireAuth(req, res, next) {
 // Optional middleware for API health check
 async function checkApiHealth(req, res, next) {
   try {
-    const service = new PhotopeaService();
+    const service = new PdfToPsdService();
     const isHealthy = await service.checkApiHealth();
     
     if (!isHealthy) {
@@ -144,18 +144,15 @@ router.post('/convert', requireAuth, checkApiHealth, async (req, res) => {
     job.message = 'Starting conversion...';
     conversionJobs.set(jobId, job);
     
-    // Initialize Photopea service
-    const service = new PhotopeaService();
-    
+    // Initialize custom PDF to PSD service
+    const service = new PdfToPsdService();
     // Convert PDF to PSD with progress tracking
-    const result = await service.convertWithScript(pdfPath, outputPath, (progress, message) => {
+    const result = await service.convertPdfToPsd(pdfPath, outputPath, (progress, message) => {
       console.log(`[${progress}%] ${message}`);
-      
       // Update job progress
       job.progress = progress;
       job.message = message;
       conversionJobs.set(jobId, job);
-      
       // Emit progress via WebSocket if available
       if (global.io) {
         global.io.to(jobId).emit('conversion-progress', {
@@ -318,7 +315,7 @@ router.post('/convert/direct', requireAuth, checkApiHealth, upload.single('pdf')
   try {
     console.log("🔄 Starting direct PDF to PSD conversion...");
     
-    const service = new PhotopeaService();
+    const service = new PdfToPsdService();
     await service.convertPDFToPSD(pdfPath, outputPath, (progress, message) => {
       console.log(`[${progress}%] ${message}`);
     });
@@ -363,7 +360,7 @@ router.post('/convert/direct', requireAuth, checkApiHealth, upload.single('pdf')
 // Get conversion service status
 router.get('/status', async (req, res) => {
   try {
-    const service = new PhotopeaService();
+    const service = new PdfToPsdService();
     const status = await service.getApiStatus();
     res.json({
       service: 'PDF to PSD Converter',
@@ -433,7 +430,7 @@ router.get('/test-route', (req, res) => {
 // Health check route
 router.get('/health', async (req, res) => {
   try {
-    const service = new PhotopeaService();
+    const service = new PdfToPsdService();
     const isHealthy = await service.checkApiHealth();
     
     res.json({
