@@ -7,31 +7,36 @@ export async function extractImagesFromPDF(pdfPath) {
   const page = pdfDoc.getPage(0);
   const images = [];
 
-  const xObjects = page.node.Resources().XObject();
-
+  const xObjects = page.node?.Resources()?.XObject?.();
   if (!xObjects) return [];
 
   const keys = xObjects.keys();
 
   for (const key of keys) {
-    const ref = xObjects.get(key);
-    const xObject = pdfDoc.context.lookup(ref);
-    const subtype = xObject.get('Subtype')?.name;
+    try {
+      const ref = xObjects.get(key);
+      const xObject = pdfDoc.context.lookup(ref);
+      const subtype = xObject.get('Subtype')?.name;
 
-    if (subtype === 'Image') {
-      const width = xObject.get('Width')?.value();
-      const height = xObject.get('Height')?.value();
-      const imageData = xObject.get('Data')?.content;
+      if (subtype === 'Image') {
+        const width = xObject.get('Width')?.value();
+        const height = xObject.get('Height')?.value();
+        const data = xObject.get('Data');
+        const content = data?.content;
 
-      if (!imageData) continue;
+        if (!content || !Buffer.isBuffer(content)) continue;
 
-      images.push({
-        name: key,
-        buffer: Buffer.from(imageData),
-        width,
-        height,
-        mimeType: 'image/png', // rough assumption, PDF doesn't specify mime
-      });
+        images.push({
+          name: key,
+          buffer: Buffer.from(content),
+          width,
+          height,
+          mimeType: 'image/png',
+        });
+      }
+    } catch (err) {
+      console.warn(`Image ${key} skipped:`, err.message);
+      continue;
     }
   }
 
