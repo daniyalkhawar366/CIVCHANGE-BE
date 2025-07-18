@@ -4,8 +4,8 @@ import path from 'path';
 import { writePsdBuffer } from 'ag-psd';
 import { fromBuffer } from 'pdf2pic';
 import { fileURLToPath } from 'url';
-import { createCanvas, ImageData } from 'canvas';
-import { extractTextFromPDF } from '../utils/extractTextFromPDF.js';
+import { createCanvas, ImageData, loadImage } from 'canvas';
+import { extractImagesFromPDF } from '../utils/extractImagesFromPDF.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,43 +37,43 @@ class PdfToPsdService {
       const baseImg = pages[0].buffer;
       const { width, height } = await sharp(baseImg).metadata();
 
-      progressCallback(30, 'Extracting text from PDF...');
-      const allText = await extractTextFromPDF(pdfPath);
+      const imageData = await sharp(baseImg)
+        .resize(width, height)
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
 
-      const psdLayers = [];
-
-      // Background raster image
-      const imageData = await sharp(baseImg).resize(width, height)
-        .ensureAlpha().raw().toBuffer();
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext('2d');
       const imgData = new ImageData(Uint8ClampedArray.from(imageData), width, height);
       ctx.putImageData(imgData, 0, 0);
-      psdLayers.push({
-        name: 'Background Image',
-        canvas,
-        opacity: 255,
-        visible: true,
-        blendMode: 'normal'
-      });
 
-      // Add cleaned text layers
-      for (const textObj of allText.filter(t => t.page === 1 && t.text.length > 2)) {
+      const psdLayers = [
+        {
+          name: 'Background Image',
+          canvas,
+          opacity: 255,
+          visible: true,
+          blendMode: 'normal'
+        }
+      ];
+
+      progressCallback(40, 'Extracting image layers from PDF...');
+      const extractedImages = await extractImagesFromPDF(pdfPath);
+
+      for (let i = 0; i < extractedImages.length; i++) {
+        const imgObj = extractedImages[i];
+        const img = await loadImage(imgObj.buffer);
+
+        const imgCanvas = createCanvas(imgObj.width, imgObj.height);
+        const imgCtx = imgCanvas.getContext('2d');
+        imgCtx.drawImage(img, 0, 0, imgObj.width, imgObj.height);
+
         psdLayers.push({
-          name: `Text: ${textObj.text.slice(0, 30)}`,
-          text: {
-            text: textObj.text,
-            font: {
-              name: 'Arial',
-              sizes: [textObj.fontSizeNorm * height],
-              colors: [[0, 0, 0]],
-              styles: [0]
-            },
-            left: textObj.xNorm * width,
-            top: (1 - textObj.yNorm) * height,
-            lineHeight: textObj.fontSizeNorm * height * 1.2,
-            letterSpacing: 0
-          },
+          name: `Image Layer ${i + 1}`,
+          canvas: imgCanvas,
+          left: 100 + i * 50,
+          top: 100 + i * 50,
           opacity: 255,
           visible: true,
           blendMode: 'normal'
@@ -84,7 +84,7 @@ class PdfToPsdService {
       const psdBuffer = writePsdBuffer({ width, height, children: psdLayers.reverse() });
       fs.writeFileSync(outputPath, psdBuffer);
 
-      progressCallback(95, 'Cleaning up temp...');
+      progressCallback(95, 'Cleaning up...');
       this.cleanupTempFiles();
 
       progressCallback(100, 'Done!');
@@ -94,6 +94,7 @@ class PdfToPsdService {
         fileSize: fs.statSync(outputPath).size,
         fileSizeKB: Math.round(fs.statSync(outputPath).size / 1024),
         pages: pages.length,
+        imageLayers: extractedImages.length,
         dimensions: { width, height }
       };
     } catch (err) {
